@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block titulo %}Equipo{% endblock %}
+{% block contenido %}
+<div class="cols" style="grid-template-columns:1fr 360px">
+  <section class="panel">
+    <h2>Equipo del taller</h2>
+    <div class="tablewrap"><table><thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Especialidad</th><th>Estado</th>{% if puede('ADMIN') %}<th></th>{% endif %}</tr></thead><tbody>
+      {% for u in users %}
+      <tr><td>{{ u.nombre }}</td><td>{{ u.email }}</td><td>{{ ROLES[u.rol] }}</td><td>{{ ESPEC[u.especialidad] if u.especialidad else '—' }}</td>
+        <td><span class="chip {{ 'done' if u.activo else 'bad' }}">{{ 'Activo' if u.activo else 'Inactivo' }}</span></td>
+        {% if puede('ADMIN') %}<td>{% if u.id != usuario().id %}
+          <form class="inline" method="post" action="{{ url_for('equipo_activo', uid=u.id) }}" {% if u.activo %}data-confirm="¿Desactivar a {{ u.nombre }}? Perderá el acceso de inmediato."{% endif %}>
+            <input type="hidden" name="csrf" value="{{ csrf() }}"><input type="hidden" name="activo" value="{{ '0' if u.activo else '1' }}">
+            <button class="btn alt small">{{ 'Desactivar' if u.activo else 'Reactivar' }}</button></form>{% endif %}
+          <details><summary>Restablecer contraseña</summary>
+            <form method="post" action="{{ url_for('equipo_password', uid=u.id) }}">
+              <input type="hidden" name="csrf" value="{{ csrf() }}">
+              <input name="nueva" type="password" minlength="12" required autocomplete="new-password" placeholder="Contraseña nueva (12+)" aria-label="Contraseña nueva para {{ u.nombre }}">
+              <button class="btn alt small" style="margin-top:6px">Guardar</button>
+            </form>
+          </details></td>{% endif %}
+      </tr>{% endfor %}
+    </tbody></table></div>
+  </section>
+  {% if puede('ADMIN') %}
+  <section class="panel">
+    <h3>Nuevo usuario</h3>
+    <form method="post" action="{{ url_for('equipo_nuevo') }}">
+      <input type="hidden" name="csrf" value="{{ csrf() }}">
+      <label for="u_n">Nombre</label><input id="u_n" name="nombre" required>
+      <label for="u_e">Correo</label><input id="u_e" name="email" type="email" required>
+      <label for="u_p">Contraseña (mínimo 12 caracteres)</label><input id="u_p" name="password" type="password" minlength="12" required autocomplete="new-password">
+      <label for="u_r">Rol</label><select id="u_r" name="rol">{% for k, v in ROLES.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select>
+      <label for="u_s">Especialidad (solo técnicos)</label>
+      <select id="u_s" name="especialidad"><option value="">Sin especialidad</option>{% for k, v in ESPEC.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select>
+      <div class="actions"><button class="btn">Crear usuario</button></div>
+    </form>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

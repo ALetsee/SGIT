@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block titulo %}Tablero por técnico{% endblock %}
+{% macro tarjeta(o) %}
+<a class="tarjeta {{ 'hv' if o.tipo != 'COMBUSTION' }}" href="{{ url_for('orden', ot_id=o.id) }}">
+  <strong>{{ o.folio }}</strong> {{ o.marca }} {{ o.modelo }}<small>{{ o.placas }} · {{ LBL[o.estado] }}{% if o.retrasada %} · <span class="rojo">retrasada</span>{% endif %}</small>
+</a>
+{% endmacro %}
+{% macro columna(c, mia) %}
+<section class="col-tec {{ 'mia' if mia }}">
+  <header><h3>{{ c.nombre }}</h3><span class="chip">{{ c.total }} abierta{{ 's' if c.total != 1 }}</span></header>
+  {% if c.especialidad %}<p class="hint" style="margin:0 0 8px">{{ ESPEC[c.especialidad] }}</p>{% endif %}
+  <h4>En rampa <span>({{ c.rampa|length }})</span></h4>
+  {% for o in c.rampa %}{{ tarjeta(o) }}{% else %}<p class="vacio">Nada en rampa</p>{% endfor %}
+  <h4>En espera <span>({{ c.espera|length }})</span></h4>
+  {% for o in c.espera %}{{ tarjeta(o) }}{% else %}<p class="vacio">Nada en espera</p>{% endfor %}
+  <h4>Listos para entrega <span>({{ c.listos|length }})</span></h4>
+  {% for o in c.listos %}{{ tarjeta(o) }}{% else %}<p class="vacio">Ninguno</p>{% endfor %}
+</section>
+{% endmacro %}
+{% block contenido %}
+<h2>Tablero por técnico</h2>
+<p class="hint" style="margin-bottom:14px">Cada columna muestra lo asignado a un técnico: <strong>en rampa</strong> (diagnóstico, reparación y pruebas de ruta), <strong>en espera</strong> (recepción y espera de refacción) y <strong>listos para entrega</strong>. La franja amarilla marca alto voltaje.</p>
+<div class="tablero">
+  {{ columna(sin, false) }}
+  {% for c in columnas %}{{ columna(c, c.id == yo) }}{% endfor %}
+</div>
+{% endblock %}

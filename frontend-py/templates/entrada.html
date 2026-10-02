@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block titulo %}Hoja de entrada {{ ot.folio }}{% endblock %}
+{% block contenido %}
+<div class="noprint actions" style="max-width:820px;margin:0 auto 14px">
+  <button class="btn" data-print>Imprimir</button>
+  <a class="btn alt" href="{{ url_for('orden', ot_id=ot.id) }}">Volver a la orden</a>
+</div>
+<article class="hoja">
+  <div class="bar"></div>
+  <h1>Hoja de entrada {{ ot.folio }}</h1>
+  <p class="hint">Electro-Motor Services. Vehículo recibido el {{ ot.creado_en|fecha }}.</p>
+  <dl>
+    <dt>Cliente</dt><dd>{{ ot.cliente_nombre }}{% if ot.cliente_telefono %}, {{ ot.cliente_telefono }}{% endif %}</dd>
+    <dt>Vehículo</dt><dd>{{ ot.marca }} {{ ot.modelo }}{% if ot.anio %} {{ ot.anio }}{% endif %} ({{ TIPOS_MOTOR[ot.tipo] }})</dd>
+    <dt>Placas y VIN</dt><dd>{{ ot.placas }}, {{ ot.vin }}</dd>
+    <dt>Kilometraje</dt><dd>{{ ot.km_ingreso if ot.km_ingreso is not none else '—' }}</dd>
+    {% if ot.nivel_combustible_pct is not none %}<dt>Nivel de combustible</dt><dd>{{ ot.nivel_combustible_pct }} %</dd>{% endif %}
+    {% if ot.carga_bateria_pct is not none %}<dt>Carga de la batería</dt><dd>{{ ot.carga_bateria_pct }} %</dd>{% endif %}
+    <dt>Falla reportada</dt><dd>{{ ot.falla_reportada or '—' }}</dd>
+    <dt>Fecha prometida</dt><dd>{{ ot.prometido_en|fecha(true) }}</dd>
+  </dl>
+  <h3 style="margin-top:20px">Inspección visual de entrada</h3>
+  <p style="white-space:pre-wrap">{{ (insp.inspeccion.descripcion if insp.inspeccion else '') or 'Sin observaciones registradas.' }}</p>
+  <h3 style="margin-top:14px">Pertenencias del cliente</h3>
+  <p style="white-space:pre-wrap">{{ (insp.inspeccion.pertenencias if insp.inspeccion else '') or 'Ninguna registrada.' }}</p>
+  {% if insp.fotografias %}
+  <h3 style="margin-top:14px">Fotografías de ingreso ({{ insp.fotografias|length }})</h3>
+  <div class="fotos">{% for f in insp.fotografias %}<img src="{{ url_for('foto', fid=f.id) }}" alt="Fotografía de ingreso {{ loop.index }}">{% endfor %}</div>
+  {% endif %}
+  <p class="hint" style="margin-top:18px">El cliente confirma que el estado del vehículo y las pertenencias descritos arriba corresponden a lo entregado al taller.</p>
+  <div class="firmas"><div>Recibe (taller)</div><div>Entrega de conformidad (cliente)</div></div>
+</article>
+{% endblock %}

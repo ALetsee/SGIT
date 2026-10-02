@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block titulo %}Inventario{% endblock %}
+{% block contenido %}
+{% set priv = puede('JEFE_TALLER','ADMIN') %}
+<form method="get" class="panel" style="display:flex;gap:10px;align-items:end;flex-wrap:wrap">
+  <div style="flex:1;min-width:220px"><label for="q" style="margin-top:0">Buscar refacción o categoría</label><input id="q" name="q" value="{{ q }}"></div>
+  <button class="btn alt">Buscar</button>
+</form>
+<div class="cols" style="grid-template-columns:1fr 360px">
+  <section class="panel">
+    <h2>Refacciones y consumibles</h2>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Pieza</th><th>Categoría</th><th class="num">Existencia</th><th class="num">Mínimo</th>{% if priv %}<th class="num">Costo u.</th><th class="num">Margen</th><th></th>{% endif %}</tr></thead>
+      <tbody>
+      {% for r in refs %}
+        <tr class="{{ 'low' if r.bajo_minimo }}">
+          <td>{{ r.nombre }}{% if r.bajo_minimo %} <span class="chip warn">Reabastecer</span>{% endif %}</td><td>{{ r.categoria or '—' }}</td>
+          <td class="num">{{ r.existencia|n }}</td><td class="num">{{ r.existencia_minima|n }}</td>
+          {% if priv %}<td class="num">{{ r.costo_unitario|money }}</td><td class="num">{{ r.margen_pct|n }}%</td>
+          <td><form class="inline" method="post" action="{{ url_for('refaccion_entrada', rid=r.id) }}" style="display:flex;gap:6px">
+            <input type="hidden" name="csrf" value="{{ csrf() }}"><input name="cantidad" inputmode="decimal" placeholder="Entrada" aria-label="Cantidad que entra" style="width:90px;min-height:34px;padding:4px">
+            <button class="btn alt small">Dar entrada</button></form></td>{% endif %}
+        </tr>
+      {% else %}<tr><td colspan="7" class="hint">No hay refacciones registradas.</td></tr>{% endfor %}
+      </tbody>
+    </table></div>
+    <p class="hint">Las piezas se descuentan solas cuando un técnico las toma desde la orden de trabajo.</p>
+  </section>
+  {% if priv %}
+  <section class="panel">
+    <h3>Nueva refacción</h3>
+    <form method="post" action="{{ url_for('refaccion_nueva') }}">
+      <input type="hidden" name="csrf" value="{{ csrf() }}">
+      <label for="n_nombre">Nombre</label><input id="n_nombre" name="nombre" required>
+      <label for="n_cat">Categoría</label><input id="n_cat" name="categoria" list="cats" placeholder="aceites, filtros, pastillas, sensores…">
+      <datalist id="cats"><option>aceites</option><option>filtros</option><option>pastillas de freno</option><option>refrigerantes dieléctricos</option><option>conectores y arneses</option><option>sensores</option><option>módulos de batería</option></datalist>
+      <div class="row2"><div><label for="n_ex">Existencia inicial</label><input id="n_ex" name="existencia" inputmode="decimal"></div>
+      <div><label for="n_min">Existencia mínima</label><input id="n_min" name="existencia_minima" inputmode="decimal"></div></div>
+      <label for="n_costo">Costo unitario del proveedor</label><input id="n_costo" name="costo_unitario" inputmode="decimal" required>
+      {% if puede('ADMIN') %}<div class="row2"><div><label for="n_m">Margen % (vacío = el configurado)</label><input id="n_m" name="margen_pct" inputmode="decimal"></div>
+      <div><label for="n_i">IVA % (vacío = el configurado)</label><input id="n_i" name="impuesto_pct" inputmode="decimal"></div></div>{% endif %}
+      <div class="actions"><button class="btn">Guardar refacción</button></div>
+    </form>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

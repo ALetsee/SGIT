@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#14222B">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="SGIT">
+<title>{% block titulo %}SGIT{% endblock %} · Electro-Motor Services</title>
+<link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
+<link rel="icon" href="{{ url_for('static', filename='icon.svg') }}" type="image/svg+xml">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ asset_v }}">
+<script src="{{ url_for('static', filename='app.js') }}?v={{ asset_v }}" defer></script>
+</head>
+<body>
+{% if session.get('token') %}
+<header class="top">
+  <a class="brand" href="{{ url_for('inicio') }}"><i></i>Electro-Motor Services</a>
+  {% set ep = request.endpoint or '' %}
+  <nav class="nav" aria-label="Secciones">
+    <a href="{{ url_for('estado') }}" {% if ep=='estado' %}aria-current="page"{% endif %}>Resumen</a>
+    <a href="{{ url_for('ordenes') }}" {% if ep.startswith('orden') %}aria-current="page"{% endif %}>Órdenes</a>
+    <a href="{{ url_for('tablero') }}" {% if ep=='tablero' %}aria-current="page"{% endif %}>Tablero</a>
+    <a href="{{ url_for('clientes') }}" {% if ep in ('clientes','vehiculo') %}aria-current="page"{% endif %}>Clientes y vehículos</a>
+    <a href="{{ url_for('inventario') }}" {% if ep=='inventario' %}aria-current="page"{% endif %}>Inventario</a>
+    <a href="{{ url_for('herramientas') }}" {% if ep=='herramientas' %}aria-current="page"{% endif %}>Herramientas</a>
+    {% if puede('JEFE_TALLER','ADMIN') %}
+    <a href="{{ url_for('reportes') }}" {% if ep=='reportes' %}aria-current="page"{% endif %}>Reportes</a>
+    <a href="{{ url_for('equipo') }}" {% if ep=='equipo' %}aria-current="page"{% endif %}>Equipo</a>
+    {% endif %}
+    {% if puede('ADMIN') %}<a href="{{ url_for('admin') }}" {% if ep=='admin' %}aria-current="page"{% endif %}>Administración</a>{% endif %}
+  </nav>
+  <div class="who">
+    <a class="cuenta" href="{{ url_for('cuenta') }}" title="Mi cuenta y cambio de contraseña"><strong>{{ usuario().nombre }}</strong>, {{ ROLES.get(usuario().rol, '') }}</a>
+    <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf" value="{{ csrf() }}"><button class="ghost">Cerrar sesión</button></form>
+  </div>
+</header>
+{% endif %}
+<main>
+  {% with mensajes = get_flashed_messages(with_categories=true) %}
+    {% for cat, m in mensajes %}<div class="flash {{ 'error' if cat=='error' else '' }}" role="{{ 'alert' if cat=='error' else 'status' }}">{{ m }}</div>{% endfor %}
+  {% endwith %}
+  {% block contenido %}{% endblock %}
+</main>
+</body>
+</html>

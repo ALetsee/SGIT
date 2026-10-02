@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block titulo %}Historial {{ h.vehiculo.placas }}{% endblock %}
+{% block contenido %}
+{% set v = h.vehiculo %}
+<section class="panel">
+  <h2>{{ v.marca }} {{ v.modelo }}{% if v.anio %} {{ v.anio }}{% endif %}, {{ v.placas }}</h2>
+  <dl><dt>VIN</dt><dd>{{ v.vin }}</dd><dt>Cliente</dt><dd>{{ v.cliente_nombre }}</dd><dt>Motor</dt><dd>{{ v.tipo }}</dd>
+  <dt>Kilometraje</dt><dd>{{ v.kilometraje_actual if v.kilometraje_actual is not none else '—' }}</dd></dl>
+</section>
+<section class="panel">
+  <h3>Historial de reparaciones</h3>
+  {% for o in h.ordenes %}
+  <div class="panel" style="background:#F7F9FA">
+    <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap">
+      <strong><a href="{{ url_for('orden', ot_id=o.id) }}">Orden {{ o.folio }}</a>, {{ o.creado_en|fecha(true) }}</strong>
+      <span class="chip {{ 'done' if o.estado in ('TERMINADA','ENTREGADO') }}">{{ LBL[o.estado] }}</span>
+    </div>
+    <dl>
+      <dt>Falla</dt><dd>{{ o.falla_reportada or '—' }}</dd>
+      <dt>Kilometraje</dt><dd>{{ o.km_ingreso if o.km_ingreso is not none else '—' }}</dd>
+      <dt>Técnico</dt><dd>{{ o.tecnico_nombre or '—' }}</dd>
+      <dt>Refacciones</dt><dd>{% for r in o.refacciones %}{{ r.nombre }} ({{ r.cantidad|n }}){{ ', ' if not loop.last }}{% else %}—{% endfor %}</dd>
+      <dt>Garantías</dt><dd>{% for g in o.garantias %}{{ 'Mano de obra' if g.tipo == 'MANO_OBRA' else 'Refacciones' }}{% if g.dias is not none %}, {{ g.dias }} días{% endif %}{% if g.kilometros is not none %}, {{ g.kilometros }} km{% endif %}{% if g.vence %}, vence {{ g.vence|fecha(true) }}{% endif %}{{ '; ' if not loop.last }}{% else %}—{% endfor %}</dd>
+    </dl>
+  </div>
+  {% else %}<div class="empty"><h3>Sin reparaciones previas</h3><p>Este vehículo todavía no tiene órdenes.</p></div>{% endfor %}
+</section>
+{% endblock %}

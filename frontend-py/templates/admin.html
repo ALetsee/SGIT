@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block titulo %}Administración{% endblock %}
+{% block contenido %}
+<div class="cols" style="grid-template-columns:340px 1fr">
+  <section class="panel">
+    <h3>Márgenes e impuestos</h3>
+    <p class="hint">Se aplican a las partidas y refacciones nuevas. Solo el administrador puede cambiarlos.</p>
+    <form method="post" action="{{ url_for('admin_config') }}">
+      <input type="hidden" name="csrf" value="{{ csrf() }}">
+      <label for="margen">Margen de ganancia %</label><input id="margen" name="margen_pct" value="{{ cfg.margen_pct }}" inputmode="decimal" required>
+      <label for="iva">Impuesto (IVA) %</label><input id="iva" name="impuesto_pct" value="{{ cfg.impuesto_pct }}" inputmode="decimal" required>
+      <div class="actions"><button class="btn">Guardar</button></div>
+    </form>
+  </section>
+  <section class="panel">
+    <h2>Bitácora de auditoría</h2>
+    <p class="hint">Registro inmutable de acciones sensibles: nadie puede editarlo ni borrarlo.</p>
+    <div class="tablewrap"><table><thead><tr><th>Cuándo</th><th>Quién</th><th>Acción</th><th>Detalle</th></tr></thead><tbody>
+      {% for a in log %}<tr><td>{{ a.creado_en|fecha }}</td><td>{{ a.usuario }}</td><td><code>{{ a.accion }}</code></td><td><small>{{ a.datos|tojson if a.datos else '' }}</small></td></tr>
+      {% else %}<tr><td colspan="4" class="hint">Todavía no hay movimientos.</td></tr>{% endfor %}
+    </tbody></table></div>
+  </section>
+</div>
+{% endblock %}

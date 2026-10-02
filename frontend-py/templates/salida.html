@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block titulo %}Orden de salida {{ s.orden.folio }}{% endblock %}
+{% block contenido %}
+{% set o = s.orden %}
+<div class="noprint actions" style="max-width:820px;margin:0 auto 14px">
+  <button class="btn" data-print>Imprimir</button>
+  <a class="btn alt" href="{{ url_for('orden', ot_id=o.id) }}">Volver a la orden</a>
+</div>
+<article class="hoja">
+  <div class="bar"></div>
+  <h1>Orden de salida {{ o.folio }}</h1>
+  <p class="hint">Electro-Motor Services. Generada el {{ o.actualizado_en|fecha }}.</p>
+  <dl>
+    <dt>Cliente</dt><dd>{{ o.cliente_nombre }}{% if o.cliente_telefono %}, {{ o.cliente_telefono }}{% endif %}</dd>
+    <dt>Vehículo</dt><dd>{{ o.marca }} {{ o.modelo }}{% if o.anio %} {{ o.anio }}{% endif %}</dd>
+    <dt>Placas y VIN</dt><dd>{{ o.placas }}, {{ o.vin }}</dd>
+    <dt>Falla reportada</dt><dd>{{ o.falla_reportada or '—' }}</dd>
+    <dt>Técnico</dt><dd>{{ o.tecnico_nombre or '—' }}</dd>
+  </dl>
+  <h3 style="margin-top:20px">Trabajos y refacciones autorizados</h3>
+  <table>
+    <thead><tr><th>Descripción</th><th class="num">Cantidad</th><th class="num">Importe</th></tr></thead>
+    <tbody>{% for p in s.partidas %}<tr><td>{{ p.descripcion or CONCEPTOS[p.concepto] }}</td><td class="num">{{ p.cantidad|n }}</td><td class="num">{{ p.precio_cliente|money }}</td></tr>{% endfor %}</tbody>
+    <tfoot><tr><td colspan="2">Total</td><td class="num">{{ s.total|money }}</td></tr></tfoot>
+  </table>
+  <h3 style="margin-top:20px">Pagos</h3>
+  <table>
+    <thead><tr><th>Fecha</th><th>Tipo</th><th>Método</th><th class="num">Monto</th></tr></thead>
+    <tbody>{% for p in s.pagos %}<tr><td>{{ p.creado_en|fecha }}</td><td>{{ p.tipo|capitalize }}</td><td>{{ p.metodo|capitalize }}</td><td class="num">{{ p.monto|money }}</td></tr>{% endfor %}</tbody>
+    <tfoot><tr><td colspan="3">Saldo pendiente</td><td class="num">{{ o.saldo|money }}</td></tr></tfoot>
+  </table>
+  {% if s.garantias %}
+  <h3 style="margin-top:20px">Garantías</h3>
+  <table><thead><tr><th>Cobertura</th><th>Días</th><th>Km</th><th>Vence</th></tr></thead><tbody>
+    {% for g in s.garantias %}<tr><td>{{ 'Mano de obra' if g.tipo == 'MANO_OBRA' else 'Refacciones' }}</td><td>{{ g.dias if g.dias is not none else '—' }}</td><td>{{ g.kilometros if g.kilometros is not none else '—' }}</td><td>{{ g.fecha_vencimiento|fecha(true) }}</td></tr>{% endfor %}
+  </tbody></table>
+  {% endif %}
+  <div class="firmas"><div>Entrega (taller)</div><div>Recibe de conformidad (cliente)</div></div>
+</article>
+{% endblock %}

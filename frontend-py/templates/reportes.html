@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block titulo %}Reportes{% endblock %}
+{% block contenido %}
+<form method="get" class="panel" style="display:flex;gap:10px;align-items:end;flex-wrap:wrap">
+  <div><label for="desde" style="margin-top:0">Desde</label><input id="desde" name="desde" type="date" value="{{ r.desde }}"></div>
+  <div><label for="hasta" style="margin-top:0">Hasta</label><input id="hasta" name="hasta" type="date" value="{{ r.hasta }}"></div>
+  <button class="btn alt">Ver reporte</button>
+</form>
+<div class="kpis">
+  <div class="kpi"><b>{{ r.facturacion_total|money }}</b><span>Facturación de órdenes entregadas</span></div>
+  <div class="kpi"><b>{{ r.utilidad_neta_total|money }}</b><span>Utilidad real neta (ingresos menos costo de piezas y mano de obra)</span></div>
+  <div class="kpi" style="border-left-color:var(--hv)"><b>{{ r.retrasos|length }}</b><span>Órdenes que excedieron el tiempo prometido</span></div>
+</div>
+<div class="cols2">
+  <section class="panel"><h3>Facturación por tipo de servicio</h3>
+    <div class="tablewrap"><table><thead><tr><th>Tipo</th><th class="num">Órdenes</th><th class="num">Facturación</th><th class="num">Utilidad neta</th></tr></thead><tbody>
+      {% for f in r.facturacion_por_tipo %}<tr><td>{{ 'Combustión' if f.clase == 'COMBUSTION' else 'Eléctricos e híbridos' }}</td><td class="num">{{ f.ordenes }}</td><td class="num">{{ f.facturacion|money }}</td><td class="num">{{ f.utilidad_neta|money }}</td></tr>
+      {% else %}<tr><td colspan="4" class="hint">Sin órdenes entregadas en este periodo.</td></tr>{% endfor %}</tbody></table></div></section>
+  <section class="panel"><h3>Órdenes terminadas por técnico</h3>
+    <div class="tablewrap"><table><thead><tr><th>Técnico</th><th class="num">Órdenes</th></tr></thead><tbody>
+      {% for t in r.ordenes_por_tecnico %}<tr><td>{{ t.tecnico }}</td><td class="num">{{ t.ordenes }}</td></tr>{% else %}<tr><td colspan="2" class="hint">Sin datos en este periodo.</td></tr>{% endfor %}</tbody></table></div></section>
+  <section class="panel"><h3>Productividad: horas facturadas contra trabajadas</h3>
+    <div class="tablewrap"><table><thead><tr><th>Técnico</th><th class="num">Trabajadas</th><th class="num">Facturadas</th><th class="num">Eficiencia</th></tr></thead><tbody>
+      {% for p in r.productividad %}{% set tr = p.horas_trabajadas|float %}{% set fa = p.horas_facturadas|float %}
+      <tr><td>{{ p.tecnico }}</td><td class="num">{{ tr|n }}</td><td class="num">{{ fa|n }}</td><td class="num">{{ ((fa / tr * 100)|round|int ~ '%') if tr > 0 else '—' }}</td></tr>
+      {% else %}<tr><td colspan="4" class="hint">Sin técnicos registrados.</td></tr>{% endfor %}</tbody></table></div></section>
+  <section class="panel"><h3>Refacciones con mayor rotación</h3>
+    <div class="tablewrap"><table><thead><tr><th>Pieza</th><th class="num">Salidas</th></tr></thead><tbody>
+      {% for x in r.rotacion_refacciones %}<tr><td>{{ x.nombre }}</td><td class="num">{{ x.salidas|n }}</td></tr>{% else %}<tr><td colspan="2" class="hint">Sin salidas en este periodo.</td></tr>{% endfor %}</tbody></table></div></section>
+</div>
+<section class="panel"><h3>Vehículos que excedieron el tiempo prometido</h3>
+  <div class="tablewrap"><table><thead><tr><th>Orden</th><th>Placas</th><th>Prometida</th><th>Estado</th><th>Motivo</th></tr></thead><tbody>
+    {% for x in r.retrasos %}<tr><td>{{ x.folio }}</td><td>{{ x.placas }}</td><td>{{ x.prometido_en|fecha(true) }}</td><td>{{ LBL[x.estado] }}</td><td>{{ RETRASOS[x.motivo_retraso] if x.motivo_retraso else 'Sin registrar' }}</td></tr>
+    {% else %}<tr><td colspan="5" class="hint">Ninguna orden se retrasó en este periodo.</td></tr>{% endfor %}</tbody></table></div></section>
+{% endblock %}

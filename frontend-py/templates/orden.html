@@ -1,0 +1,354 @@
+{% extends "base.html" %}
+{% block titulo %}Orden {{ ot.folio }}{% endblock %}
+{% block contenido %}
+{% set rol = usuario().rol %}
+{% set hv = ot.tipo != 'COMBUSTION' %}
+{% set idx = ESTADOS.index(ot.estado) %}
+{% set cerrada = ot.estado in ('TERMINADA','ENTREGADO') %}
+{% set hv_abierto = checklist and checklist.circuito_hv_off and checklist.service_plug_out and checklist.epp_certificado and checklist.firmado_en %}
+{% set recepcion_o_jefe = rol in ('RECEPCION','JEFE_TALLER','ADMIN') %}
+{% set ruta = url_for('orden', ot_id=ot.id) %}
+
+<section class="panel">
+  <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center">
+    <h2>Orden {{ ot.folio }}: {{ ot.marca }} {{ ot.modelo }}, {{ ot.placas }}</h2>
+    <span>{% if hv %}<span class="chip warn">Alto voltaje ({{ ot.tipo }})</span> {% endif %}<span class="chip {{ 'done' if cerrada }}">{{ LBL[ot.estado] }}</span>
+      <a class="btn alt small" href="{{ url_for('orden_entrada', ot_id=ot.id) }}">Hoja de entrada</a></span>
+  </div>
+
+  <div class="pipe" role="group" aria-label="Estado de la orden">
+    {% for e in ESTADOS %}
+      {% if e == 'REPARACION' and hv %}
+        <div class="gate {{ 'open' if hv_abierto }}" title="{{ 'Checklist HV firmado: puede pasar a Reparación' if hv_abierto else 'Checklist HV pendiente: Reparación bloqueada' }}"><span>{{ 'HV OK' if hv_abierto else 'HV' }}</span></div>
+      {% endif %}
+      {% set permitido = (rol in ('JEFE_TALLER','ADMIN')) or (rol == 'TECNICO' and e != 'ENTREGADO') or (rol == 'RECEPCION' and e == 'ENTREGADO') %}
+      <form method="post" action="{{ url_for('orden_accion', ot_id=ot.id, nombre='estado') }}">
+        <input type="hidden" name="csrf" value="{{ csrf() }}"><input type="hidden" name="estado" value="{{ e }}">
+        <button class="stage {{ 'cur' if loop.index0 == idx else ('past' if loop.index0 < idx) }}" {{ 'disabled' if (not permitido) or loop.index0 == idx }}>{{ LBL[e] }}</button>
+      </form>
+    {% endfor %}
+  </div>
+  <p class="hint">
+    {% if rol == 'RECEPCION' %}Recepción registra la entrega cuando la orden está terminada y pagada.
+    {% elif rol == 'TECNICO' %}Toca una etapa para cambiar el estado. La entrega la registra recepción.
+    {% else %}Toca una etapa para cambiar el estado.{% endif %}
+    {% if hv %}La franja amarilla es la compuerta de alto voltaje: se abre con el checklist firmado por un técnico certificado.{% endif %}
+  </p>
+</section>
+
+<div class="cols2" style="grid-template-columns:1fr 1.35fr">
+<div>
+  <section class="panel">
+    <h3>Datos de la orden</h3>
+    <dl>
+      <dt>Cliente</dt><dd>{{ ot.cliente_nombre }}{% if ot.cliente_telefono %}, {{ ot.cliente_telefono }}{% endif %}</dd>
+      <dt>Vehículo</dt><dd><a href="{{ url_for('vehiculo', vid=ot.vehiculo_id) }}">{{ ot.marca }} {{ ot.modelo }}{% if ot.anio %} {{ ot.anio }}{% endif %}</a></dd>
+      <dt>VIN</dt><dd>{{ ot.vin }}</dd>
+      <dt>Falla reportada</dt><dd>{{ ot.falla_reportada or '—' }}</dd>
+      <dt>Km de ingreso</dt><dd>{{ ot.km_ingreso if ot.km_ingreso is not none else '—' }}</dd>
+      {% if ot.nivel_combustible_pct is not none %}<dt>Combustible</dt><dd>{{ ot.nivel_combustible_pct }} %</dd>{% endif %}
+      {% if ot.carga_bateria_pct is not none %}<dt>Carga de batería</dt><dd>{{ ot.carga_bateria_pct }} %</dd>{% endif %}
+      <dt>Técnico</dt><dd>{{ ot.tecnico_nombre or 'Sin asignar' }}</dd>
+      <dt>Prometida</dt><dd>{{ ot.prometido_en|fecha(true) }}{% if ot.motivo_retraso %} <span class="chip bad">{{ RETRASOS[ot.motivo_retraso] }}</span>{% endif %}</dd>
+      {% if ot.saldo is defined %}<dt>Saldo</dt><dd><strong>{{ ot.saldo|money }}</strong></dd>{% endif %}
+      <dt>Creada</dt><dd>{{ ot.creado_en|fecha }}</dd>
+      {% if ot.entregado_en %}<dt>Entregada</dt><dd>{{ ot.entregado_en|fecha }}</dd>{% endif %}
+    </dl>
+    {% if priv %}
+    <form method="post" action="{{ url_for('orden_accion', ot_id=ot.id, nombre='asignar') }}">
+      <input type="hidden" name="csrf" value="{{ csrf() }}">
+      <label for="tecnico_id">Asignar técnico</label>
+      <div class="row2">
+        <select id="tecnico_id" name="tecnico_id" required>
+          <option value="">Elige un técnico</option>
+          {% for t in tecnicos %}<option value="{{ t.id }}" {{ 'selected' if t.id == ot.tecnico_id }}>{{ t.nombre }}{% if t.especialidad %}, {{ ESPEC[t.especialidad] }}{% endif %}</option>{% endfor %}
+        </select>
+        <button class="btn alt">Guardar asignación</button>
+      </div>
+    </form>
+    <form method="post" action="{{ url_for('orden_accion', ot_id=ot.id, nombre='retraso') }}">
+      <input type="hidden" name="csrf" value="{{ csrf() }}">
+      <label for="motivo">Motivo de retraso (si la orden excede el tiempo prometido)</label>
+      <div class="row2">
+        <select id="motivo" name="motivo" required>{% for k, v in RETRASOS.items() %}<option value="{{ k }}" {{ 'selected' if ot.motivo_retraso == k }}>{{ v }}</option>{% endfor %}</select>
+        <button class="btn alt">Registrar motivo</button>
+      </div>
+    </form>
+    {% endif %}
+    {% if puede('ADMIN') and ot.estado != 'ENTREGADO' %}
+    <form class="actions" method="post" action="{{ url_for('orden_eliminar', ot_id=ot.id) }}" data-confirm="¿Eliminar la orden {{ ot.folio }}? Esta acción queda en la auditoría y no se puede deshacer.">
+      <input type="hidden" name="csrf" value="{{ csrf() }}"><button class="btn warn small">Eliminar orden</button>
+    </form>
+    {% endif %}
+  </section>
+
+  <section class="panel">
+    <h3>Inspección de entrada y fotografías</h3>
+    <form method="post" action="{{ url_for('orden_accion', ot_id=ot.id, nombre='inspeccion') }}">
+      <input type="hidden" name="csrf" value="{{ csrf() }}">
+      <label for="descripcion">Rayones, golpes y estado exterior</label>
+      <textarea id="descripcion" name="descripcion">{{ insp.inspeccion.descripcion if insp.inspeccion else '' }}</textarea>
+      <label for="pertenencias">Pertenencias del cliente (llanta de refacción, herramientas, otros)</label>
+      <textarea id="pertenencias" name="pertenencias">{{ insp.inspeccion.pertenencias if insp.inspeccion else '' }}</textarea>
+      <div class="actions"><button class="btn alt">Guardar inspección</button></div>
+    </form>
+    <p class="hint" style="margin-top:14px">Fotografías: {{ insp.fotografias|length }}{% if insp.minimas %} de {{ insp.minimas }} requeridas para iniciar el diagnóstico{% endif %}.</p>
+    <form method="post" enctype="multipart/form-data" action="{{ url_for('orden_foto', ot_id=ot.id) }}">
+      <input type="hidden" name="csrf" value="{{ csrf() }}">
+      <label for="foto">Tomar o elegir fotografías</label>
+      <input id="foto" name="foto" type="file" accept="image/*" capture="environment" multiple required>
+      <div class="actions"><button class="btn alt">Subir fotografías</button></div>
+    </form>
+    {% if insp.fotografias %}
+    <div class="fotos">{% for f in insp.fotografias %}<a href="{{ url_for('foto', fid=f.id) }}" target="_blank" rel="noopener"><img src="{{ url_for('foto', fid=f.id) }}" alt="Fotografía de inspección {{ loop.index }}" loading="lazy"></a>{% endfor %}</div>
+    {% endif %}
+  </section>
+
+  {% if hv %}
+  <section class="panel">
+    <h3>Seguridad de alto voltaje</h3>
+    {% if checklist %}
+      <p class="hint">{% if hv_abierto %}Firmado por {{ checklist.tecnico_hv_nombre }} el {{ checklist.firmado_en|fecha }}.{% else %}Checklist incompleto: la orden no puede pasar a Reparación.{% endif %}</p>
+    {% else %}
+      <p class="hint">Aún no hay checklist. Un técnico certificado en alta tensión debe firmarlo antes de pasar a Reparación.</p>
+    {% endif %}
+    {% if rol == 'TECNICO' %}
+    <form method="post" action="{{ url_for('orden_accion', ot_id=ot.id, nombre='checklist') }}">
+      <input type="hidden" name="csrf" value="{{ csrf() }}">
+      <label class="check"><input type="checkbox" name="circuito_hv_off" {{ 'checked' if checklist and checklist.circuito_hv_off }}> Circuito de alto voltaje desconectado</label>
+      <label class="check"><input type="checkbox" name="service_plug_out" {{ 'checked' if checklist and checklist.service_plug_out }}> Service Plug retirado</label>
+      <label class="check"><input type="checkbox" name="epp_certificado" {{ 'checked' if checklist and checklist.epp_certificado }}> Guantes aislados y herramientas certificadas en uso</label>
+      <div class="actions"><button class="btn">Firmar checklist</button></div>
+      <p class="hint">Solo firma un técnico con especialidad certificado en alta tensión.</p>
+    </form>
+    {% elif checklist %}
+    <ul style="margin:8px 0 0;padding-left:20px">
+      <li>Circuito HV desconectado: {{ 'sí' if checklist.circuito_hv_off else 'no' }}</li>
+      <li>Service Plug retirado: {{ 'sí' if checklist.service_plug_out else 'no' }}</li>
+      <li>Equipo de protección certificado: {{ 'sí' if checklist.epp_certificado else 'no' }}</li>
+    </ul>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  <section class="panel">
+    <h3>Horas trabajadas</h3>
+    {% if rol in ('TECNICO','JEFE_TALLER','ADMIN') %}
+    <form method="post" action="{{ url_for('orden_accion', ot_id=ot.id, nombre='horas') }}">
+      <input type="hidden" name="csrf" value="{{ csrf() }}">
+      <div class="row2"><div><label for="horas">Horas</label><input id="horas" name="horas" inputmode="decimal" required></div>
+      <div><label for="nota">Nota</label><input id="nota" name="nota"></div></div>
+      <div class="actions"><button class="btn alt">Registrar horas</button></div>
+    </form>
+    {% endif %}
+    {% if horas.registros %}
+    <div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Técnico</th><th class="num">Horas</th><th>Nota</th></tr></thead><tbody>
+      {% for h in horas.registros %}<tr><td>{{ h.creado_en|fecha }}</td><td>{{ h.tecnico_nombre }}</td><td class="num">{{ h.horas|n }}</td><td>{{ h.nota or '' }}</td></tr>{% endfor %}
+    </tbody><tfoot><tr><td colspan="2">Total</td><td class="num">{{ horas.total_horas|n }}</td><td></td></tr></tfoot></table></div>
+    {% else %}<p class="hint">Aún no hay horas registradas.</p>{% endif %}
+  </section>
+
+  <section class="panel">
+    <h3>Refacciones bajo pedido</h3>
+    {% if rol in ('TECNICO','JEFE_TALLER','ADMIN') and not cerrada %}
+    <form method="post" action="{{ url_for('orden_accion', ot_id=ot.id, nombre='pedido') }}">
+      <input type="hidden" name="csrf" value="{{ csrf() }}">
+      <div class="row2"><div><label for="proveedor">Proveedor</label><input id="proveedor" name="proveedor" required></div>
+      <div><label for="guia">Número de guía</label><input id="guia" name="numero_guia"></div></div>
+      <div class="row2"><div><label for="eta">Llegada estimada</label><input id="eta" name="eta" type="date"></div>
+      <div><label for="ped_ref">Refacción del catálogo (opcional)</label>
+        <select id="ped_ref" name="refaccion_id"><option value="">Otra pieza</option>{% for r in refacciones %}<option value="{{ r.id }}">{{ r.nombre }}</option>{% endfor %}</select></div></div>
+      <div class="actions"><button class="btn alt">Registrar pedido</button></div>
+      <p class="hint">Al registrar el pedido, la orden pasa a “Espera de refacción”.</p>
+    </form>
+    {% endif %}
+    {% if pedidos %}
+    <div class="tablewrap"><table><thead><tr><th>Proveedor</th><th>Guía</th><th>Llegada</th><th></th></tr></thead><tbody>
+      {% for p in pedidos %}<tr><td>{{ p.proveedor }}{% if p.refaccion %}<br><small>{{ p.refaccion }}</small>{% endif %}</td><td>{{ p.numero_guia or '—' }}</td><td>{{ p.eta|fecha(true) }}</td>
+        <td>{% if p.recibido_en %}<span class="chip done">Recibido</span>{% elif priv %}
+          <form class="inline" method="post" action="{{ url_for('pedido_recibido', pid=p.id) }}"><input type="hidden" name="csrf" value="{{ csrf() }}"><input type="hidden" name="volver" value="{{ ruta }}"><button class="btn alt small">Marcar recibido</button></form>
+          {% else %}<span class="chip">En camino</span>{% endif %}</td></tr>{% endfor %}
+    </tbody></table></div>
+    {% endif %}
+  </section>
+</div>
+
+<div>
+  <section class="panel">
+    <h3>Cotización</h3>
+    {% if cot.partidas %}
+    <div class="tablewrap"><table>
+      <thead><tr><th>Concepto</th><th class="num">Cant.</th>{% if priv %}<th class="num">Costo u.</th><th class="num">Margen</th><th class="num">IVA</th>{% endif %}<th class="num">Precio</th><th>Autorización</th></tr></thead>
+      <tbody>
+      {% for p in cot.partidas %}
+      <tr>
+        <td><strong>{{ CONCEPTOS[p.concepto] }}</strong><br><small>{{ p.descripcion or '' }}</small></td>
+        <td class="num">{{ p.cantidad|n }}</td>
+        {% if priv %}<td class="num">{{ p.costo|money }}</td><td class="num">{{ p.margen_pct|n }}%</td><td class="num">{{ p.impuesto_pct|n }}%</td>{% endif %}
+        <td class="num">{{ p.precio_cliente|money }}</td>
+        <td>
+          {% if p.autorizada %}
+            <span class="chip done">Autorizada</span><br><small>{{ MEDIOS[p.medio_autorizacion] }}, {{ p.autorizado_en|fecha }}</small>
+            {% if recepcion_o_jefe and ot.estado != 'ENTREGADO' %}
+            <form class="inline" method="post" action="{{ url_for('partida_autorizar', pid=p.id) }}"><input type="hidden" name="csrf" value="{{ csrf() }}"><input type="hidden" name="volver" value="{{ ruta }}"><input type="hidden" name="autorizada" value="0"><button class="btn alt small">Rechazar</button></form>
+            {% endif %}
+          {% else %}
+            <span class="chip bad">Pendiente</span>
+            {% if recepcion_o_jefe and ot.estado != 'ENTREGADO' %}
+            <form method="post" action="{{ url_for('partida_autorizar', pid=p.id) }}" style="margin-top:6px;display:flex;gap:6px">
+              <input type="hidden" name="csrf" value="{{ csrf() }}"><input type="hidden" name="volver" value="{{ ruta }}"><input type="hidden" name="autorizada" value="1">
+              <select name="medio" aria-label="Medio de autorización" style="min-height:34px;padding:4px">{% for k, v in MEDIOS.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select>
+              <button class="btn small">Autorizar</button>
+            </form>
+            {% endif %}
+          {% endif %}
+          {% if puede('ADMIN') and ot.estado != 'ENTREGADO' %}
+          <details><summary>Editar precio</summary>
+            <form method="post" action="{{ url_for('partida_precio', pid=p.id) }}">
+              <input type="hidden" name="csrf" value="{{ csrf() }}"><input type="hidden" name="volver" value="{{ ruta }}">
+              <div class="row2">
+                {% if not p.refaccion_id %}<div><label>Cantidad</label><input name="cantidad" value="{{ p.cantidad|n }}"></div>{% endif %}
+                <div><label>Costo unitario</label><input name="costo" value="{{ p.costo }}"></div>
+                <div><label>Margen %</label><input name="margen_pct" value="{{ p.margen_pct|n }}"></div>
+                <div><label>IVA %</label><input name="impuesto_pct" value="{{ p.impuesto_pct|n }}"></div>
+              </div>
+              <div class="actions"><button class="btn alt small">Guardar precio</button></div>
+              <p class="hint">La partida volverá a requerir autorización del cliente.</p>
+            </form>
+          </details>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr><td colspan="{{ 5 if priv else 2 }}">Total cotizado</td><td class="num">{{ cot.total_cotizado|money }}</td><td></td></tr>
+        <tr><td colspan="{{ 5 if priv else 2 }}">Total autorizado por el cliente</td><td class="num">{{ cot.total_autorizado|money }}</td><td></td></tr>
+      </tfoot>
+    </table></div>
+    {% if recepcion_o_jefe and ot.estado != 'ENTREGADO' %}
+    <form class="actions" method="post" action="{{ url_for('orden_accion', ot_id=ot.id, nombre='autorizar_todas') }}">
+      <input type="hidden" name="csrf" value="{{ csrf() }}">
+      <label for="medio_todas" style="margin:0">Autorizar todo el presupuesto por</label>
+      <select id="medio_todas" name="medio" style="width:auto">{% for k, v in MEDIOS.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select>
+      <button class="btn alt small">Autorizar todo</button>
+    </form>
+    {% endif %}
+    {% else %}
+    <div class="empty"><h3>Sin partidas</h3><p>{% if priv %}Agrega mano de obra o servicios; las refacciones se cargan al tomarlas del almacén.{% else %}El jefe de taller aún no ha cotizado esta orden.{% endif %}</p></div>
+    {% endif %}
+
+    {% if priv and ot.estado != 'ENTREGADO' %}
+    <details style="margin-top:12px"><summary>Agregar partida (mano de obra, trabajo externo, servicio eléctrico)</summary>
+      <form method="post" action="{{ url_for('orden_accion', ot_id=ot.id, nombre='partida') }}">
+        <input type="hidden" name="csrf" value="{{ csrf() }}">
+        <label for="concepto">Concepto</label>
+        <select id="concepto" name="concepto" required>{% for k, v in CONCEPTOS.items() if k != 'REFACCION_NUEVA' %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select>
+        <label for="pdesc">Descripción</label><input id="pdesc" name="descripcion" required>
+        <div class="row2"><div><label for="pcant">Cantidad (horas o piezas)</label><input id="pcant" name="cantidad" inputmode="decimal" value="1" required></div>
+        <div><label for="pcosto">Costo unitario (sin margen ni IVA)</label><input id="pcosto" name="costo" inputmode="decimal" required></div></div>
+        {% if puede('ADMIN') %}<div class="row2"><div><label for="pm">Margen % (vacío = el configurado)</label><input id="pm" name="margen_pct" inputmode="decimal"></div>
+        <div><label for="pi">IVA % (vacío = el configurado)</label><input id="pi" name="impuesto_pct" inputmode="decimal"></div></div>{% endif %}
+        <p class="hint">El precio al cliente se calcula solo con el margen y el impuesto vigentes.</p>
+        <div class="actions"><button class="btn">Agregar a la cotización</button></div>
+      </form>
+    </details>
+    {% endif %}
+    {% if priv %}
+    <details style="margin-top:12px"><summary>Historial de versiones de la cotización ({{ versiones|length }})</summary>
+      <p class="hint">Cada cambio (partida nueva, precio editado, autorización o pieza tomada) guarda una versión que ya no se puede modificar.</p>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Ver.</th><th>Cuándo</th><th>Quién</th><th>Cambio</th><th class="num">Cotizado</th><th class="num">Autorizado</th></tr></thead>
+        <tbody>
+        {% for v in versiones %}
+        <tr><td>{{ v.version }}</td><td>{{ v.creado_en|fecha }}</td><td>{{ v.usuario }}</td>
+          <td>{{ v.motivo }}
+            <details><summary>Ver partidas de esta versión</summary>
+              <table><thead><tr><th>Concepto</th><th class="num">Cant.</th><th class="num">Costo u.</th><th class="num">Precio</th><th>Autoriz.</th></tr></thead><tbody>
+              {% for p in v.partidas %}<tr><td>{{ p.descripcion or CONCEPTOS[p.concepto] }}</td><td class="num">{{ p.cantidad|n }}</td><td class="num">{{ p.costo|money }}</td><td class="num">{{ p.precio_cliente|money }}</td><td>{{ 'Sí' if p.autorizada else 'No' }}</td></tr>{% endfor %}
+              </tbody></table>
+            </details></td>
+          <td class="num">{{ v.total_cotizado|money }}</td><td class="num">{{ v.total_autorizado|money }}</td></tr>
+        {% else %}<tr><td colspan="6" class="hint">Todavía no hay versiones: se crean con el primer cambio.</td></tr>{% endfor %}
+        </tbody>
+      </table></div>
+    </details>
+    {% endif %}
+  </section>
+
+  <section class="panel">
+    <h3>Refacciones del almacén</h3>
+    {% if rol in ('TECNICO','JEFE_TALLER','ADMIN') %}
+      {% if cerrada %}<p class="hint">La orden está {{ LBL[ot.estado]|lower }}: ya no admite consumo de piezas.</p>
+      {% else %}
+      <form method="post" action="{{ url_for('orden_accion', ot_id=ot.id, nombre='consumo') }}">
+        <input type="hidden" name="csrf" value="{{ csrf() }}">
+        <div class="row2">
+          <div><label for="refaccion_id">Pieza</label>
+            <select id="refaccion_id" name="refaccion_id" required><option value="">Elige una pieza</option>
+              {% for r in refacciones %}<option value="{{ r.id }}" {{ 'disabled' if r.existencia|float <= 0 }}>{{ r.nombre }} (hay {{ r.existencia|n }})</option>{% endfor %}</select></div>
+          <div><label for="ccant">Cantidad</label><input id="ccant" name="cantidad" inputmode="decimal" value="1" required></div>
+        </div>
+        <div class="actions"><button class="btn">Tomar del almacén y cargar a la orden</button></div>
+        <p class="hint">Descuenta el inventario y la agrega a la cotización en un solo paso. Si no alcanzan las existencias, no se hace nada.</p>
+      </form>
+      {% endif %}
+    {% endif %}
+    {% if consumos %}
+    <div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Pieza</th><th class="num">Cant.</th><th>Registró</th></tr></thead><tbody>
+      {% for c in consumos %}<tr><td>{{ c.creado_en|fecha }}</td><td>{{ c.refaccion }}</td><td class="num">{{ c.cantidad|n }}</td><td>{{ c.usuario or '—' }}</td></tr>{% endfor %}
+    </tbody></table></div>
+    {% elif rol not in ('TECNICO','JEFE_TALLER','ADMIN') %}<p class="hint">Aún no se han consumido piezas.</p>{% endif %}
+  </section>
+
+  {% if recepcion_o_jefe %}
+  <section class="panel">
+    <h3>Cobranza y entrega</h3>
+    <p style="font-size:20px;margin:0 0 8px">Saldo pendiente: <strong>{{ ot.saldo|money }}</strong></p>
+    {% if pagos %}
+    <div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Método</th><th class="num">Monto</th></tr></thead><tbody>
+      {% for p in pagos %}<tr><td>{{ p.creado_en|fecha }}</td><td>{{ p.tipo|capitalize }}</td><td>{{ p.metodo|capitalize }}</td><td class="num">{{ p.monto|money }}</td></tr>{% endfor %}
+    </tbody></table></div>
+    {% endif %}
+    {% if ot.estado != 'ENTREGADO' %}
+    <form method="post" action="{{ url_for('orden_accion', ot_id=ot.id, nombre='pago') }}">
+      <input type="hidden" name="csrf" value="{{ csrf() }}">
+      <div class="row3">
+        <div><label for="monto">Monto</label><input id="monto" name="monto" inputmode="decimal" required></div>
+        <div><label for="metodo">Método</label><select id="metodo" name="metodo"><option value="EFECTIVO">Efectivo</option><option value="TARJETA">Tarjeta</option><option value="TRANSFERENCIA">Transferencia</option></select></div>
+        <div><label for="tipo">Tipo</label><select id="tipo" name="tipo"><option value="ANTICIPO">Anticipo</option><option value="PARCIAL">Pago parcial</option><option value="FINAL">Pago final</option></select></div>
+      </div>
+      <div class="actions"><button class="btn alt">Registrar pago</button></div>
+    </form>
+    {% endif %}
+
+    <h3 style="margin-top:18px">Garantías</h3>
+    {% if garantias %}
+    <div class="tablewrap"><table><thead><tr><th>Tipo</th><th>Días</th><th>Km</th><th>Vence</th></tr></thead><tbody>
+      {% for g in garantias %}<tr><td>{{ 'Mano de obra' if g.tipo == 'MANO_OBRA' else 'Refacciones' }}</td><td>{{ g.dias if g.dias is not none else '—' }}</td><td>{{ g.kilometros if g.kilometros is not none else '—' }}</td><td>{{ g.fecha_vencimiento|fecha(true) }}</td></tr>{% endfor %}
+    </tbody></table></div>
+    {% endif %}
+    <form method="post" action="{{ url_for('orden_accion', ot_id=ot.id, nombre='garantia') }}">
+      <input type="hidden" name="csrf" value="{{ csrf() }}">
+      <div class="row3">
+        <div><label for="gtipo">Garantía de</label><select id="gtipo" name="tipo"><option value="MANO_OBRA">Mano de obra</option><option value="REFACCION">Refacciones</option></select></div>
+        <div><label for="gdias">Días</label><input id="gdias" name="dias" inputmode="numeric"></div>
+        <div><label for="gkm">Kilómetros</label><input id="gkm" name="kilometros" inputmode="numeric"></div>
+      </div>
+      <div class="actions"><button class="btn alt">Registrar garantía</button></div>
+    </form>
+
+    <div class="actions" style="margin-top:18px">
+      <a class="btn {{ '' if ot.estado in ('TERMINADA','ENTREGADO') and ot.saldo|float == 0 else 'alt' }}" href="{{ url_for('orden_salida', ot_id=ot.id) }}">Orden de salida</a>
+      {% if ot.estado == 'TERMINADA' %}
+      <form class="inline" method="post" action="{{ url_for('orden_accion', ot_id=ot.id, nombre='estado') }}" data-confirm="¿Registrar la entrega del vehículo al cliente?">
+        <input type="hidden" name="csrf" value="{{ csrf() }}"><input type="hidden" name="estado" value="ENTREGADO"><button class="btn">Entregar vehículo</button>
+      </form>
+      {% endif %}
+    </div>
+    <p class="hint">La orden de salida y la entrega se bloquean mientras la orden no esté terminada o tenga saldo pendiente.</p>
+  </section>
+  {% endif %}
+</div>
+</div>
+{% endblock %}

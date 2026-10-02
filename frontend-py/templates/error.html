@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block titulo %}Aviso{% endblock %}
+{% block contenido %}
+<div class="panel empty">
+  <h2>{{ 'No tienes permiso' if status==403 else ('No encontrado' if status==404 else 'No se pudo completar') }}</h2>
+  <p>{{ msg }}</p>
+  <p><a class="btn alt" href="{{ url_for('ordenes') }}">Volver a las órdenes</a></p>
+</div>
+{% endblock %}

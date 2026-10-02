@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block titulo %}Mi cuenta{% endblock %}
+{% block contenido %}
+<div style="max-width:520px">
+  <section class="panel">
+    <h2>Mi cuenta</h2>
+    <dl><dt>Nombre</dt><dd>{{ usuario().nombre }}</dd><dt>Correo</dt><dd>{{ usuario().email }}</dd><dt>Rol</dt><dd>{{ ROLES.get(usuario().rol, '') }}</dd></dl>
+  </section>
+  <section class="panel">
+    <h3>Cambiar contraseña</h3>
+    <form method="post" action="{{ url_for('cuenta_password') }}">
+      <input type="hidden" name="csrf" value="{{ csrf() }}">
+      <label for="actual">Contraseña actual</label><input id="actual" name="actual" type="password" required autocomplete="current-password">
+      <label for="nueva">Contraseña nueva (mínimo 12 caracteres)</label><input id="nueva" name="nueva" type="password" minlength="12" required autocomplete="new-password">
+      <label for="confirmar">Confirma la contraseña nueva</label><input id="confirmar" name="confirmar" type="password" minlength="12" required autocomplete="new-password">
+      <p class="hint">Una frase larga es mejor que una palabra con símbolos. No uses tu correo ni contraseñas comunes. Al cambiarla se cierran tus demás sesiones abiertas.</p>
+      <div class="actions"><button class="btn">Cambiar contraseña</button></div>
+    </form>
+  </section>
+</div>
+{% endblock %}

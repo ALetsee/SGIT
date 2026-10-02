@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block titulo %}Resumen del taller{% endblock %}
+{% block contenido %}
+<h2>Estado del taller</h2>
+<p class="hint" style="margin-bottom:14px">Vista rápida pensada para el celular. Se actualiza cada vez que entras o recargas.</p>
+<div class="kpis">
+  <a class="kpi" href="{{ url_for('ordenes') }}"><b>{{ e.abiertas }}</b><span>Órdenes abiertas</span></a>
+  <a class="kpi" href="{{ url_for('ordenes', estado='TERMINADA') }}" style="border-left-color:var(--ok)"><b>{{ e.listas_para_entrega }}</b><span>Listas para entregar</span></a>
+  <a class="kpi {{ 'alerta' if e.retrasadas }}" href="{{ url_for('tablero') }}"><b>{{ e.retrasadas }}</b><span>Pasadas de la fecha prometida</span></a>
+  <div class="kpi"><b>{{ e.entregadas_hoy }}</b><span>Entregadas hoy</span></div>
+  {% if e.por_cobrar is defined %}<div class="kpi" style="border-left-color:var(--hv)"><b>{{ e.por_cobrar|money }}</b><span>Por cobrar en órdenes abiertas</span></div>{% endif %}
+  <a class="kpi {{ 'alerta' if e.refacciones_bajo_minimo }}" href="{{ url_for('inventario') }}"><b>{{ e.refacciones_bajo_minimo }}</b><span>Piezas por reabastecer</span></a>
+  <a class="kpi {{ 'alerta' if e.herramientas_sin_devolver }}" href="{{ url_for('herramientas') }}"><b>{{ e.herramientas_sin_devolver }}</b><span>Herramientas sin devolver</span></a>
+</div>
+<div class="cols2">
+  <section class="panel">
+    <h3>Órdenes por estado</h3>
+    {% set total = e.por_estado.values()|sum %}
+    {% for est in ESTADOS %}
+    <div class="barra"><span>{{ LBL[est] }}</span><div class="pista"><i style="width:{{ ((e.por_estado[est] / total * 100) if total else 0)|round(1) }}%"></i></div><b>{{ e.por_estado[est] }}</b></div>
+    {% endfor %}
+  </section>
+  <section class="panel">
+    <h3>Órdenes retrasadas</h3>
+    {% for o in e.retrasadas_lista %}
+    <a class="item" href="{{ url_for('orden', ot_id=o.id) }}">
+      <span class="folio">{{ o.folio }}</span>
+      <span>{{ o.marca }} {{ o.modelo }}, {{ o.placas }}<small>Prometida {{ o.prometido_en|fecha(true) }}</small></span>
+      <span class="chip bad">{{ LBL[o.estado] }}</span>
+    </a>
+    {% else %}<div class="empty"><h3>Sin retrasos</h3><p>Ninguna orden abierta pasó su fecha prometida.</p></div>{% endfor %}
+  </section>
+</div>
+{% endblock %}

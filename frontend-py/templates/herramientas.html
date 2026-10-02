@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block titulo %}Herramientas{% endblock %}
+{% block contenido %}
+{% if alertas %}
+<section class="panel" style="border-left:6px solid var(--hv)">
+  <h3>Herramientas sin devolver</h3>
+  <div class="tablewrap"><table><thead><tr><th>Herramienta</th><th>La tiene</th><th>Desde</th><th>Orden</th><th>Motivo</th></tr></thead><tbody>
+    {% for a in alertas %}<tr><td>{{ a.nombre }}</td><td>{{ a.prestada_a }}</td><td>{{ a.prestado_en|fecha }}</td><td>{{ a.ot_folio or '—' }}</td><td>{{ a.motivo }}</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+{% endif %}
+<div class="cols" style="grid-template-columns:1fr 340px">
+  <section class="panel">
+    <h2>Herramientas especializadas</h2>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Herramienta</th><th>Estado</th><th>Préstamo</th></tr></thead>
+      <tbody>
+      {% for h in hs %}
+      <tr>
+        <td>{{ h.nombre }}{% if h.valor_estimado %}<br><small>Valor estimado {{ h.valor_estimado|money }}</small>{% endif %}</td>
+        <td>{% if h.prestamo_id %}<span class="chip warn">Prestada a {{ h.prestada_a }}</span><br><small>{{ h.prestado_en|fecha }}{% if h.ot_folio %}, orden {{ h.ot_folio }}{% endif %}</small>{% else %}<span class="chip done">Disponible</span>{% endif %}</td>
+        <td>
+          {% if h.prestamo_id %}
+            <form class="inline" method="post" action="{{ url_for('herramienta_devolucion', hid=h.id) }}"><input type="hidden" name="csrf" value="{{ csrf() }}"><button class="btn alt small">Registrar devolución</button></form>
+          {% elif puede('TECNICO','JEFE_TALLER','ADMIN') %}
+            <form method="post" action="{{ url_for('herramienta_prestamo', hid=h.id) }}">
+              <input type="hidden" name="csrf" value="{{ csrf() }}">
+              <select name="ot_id" aria-label="Orden de trabajo" style="min-height:34px;padding:4px"><option value="">Sin orden</option>{% for o in ordenes %}<option value="{{ o.id }}">Orden {{ o.folio }}, {{ o.placas }}</option>{% endfor %}</select>
+              {% if tecnicos %}<select name="tecnico_id" aria-label="Técnico que la recibe" required style="min-height:34px;padding:4px;margin-top:4px"><option value="">¿Quién la toma?</option>{% for t in tecnicos %}<option value="{{ t.id }}">{{ t.nombre }}</option>{% endfor %}</select>{% endif %}
+              <button class="btn small" style="margin-top:4px">Tomar herramienta</button>
+            </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}<tr><td colspan="3" class="hint">No hay herramientas registradas.</td></tr>{% endfor %}
+      </tbody>
+    </table></div>
+  </section>
+  {% if puede('JEFE_TALLER','ADMIN') %}
+  <section class="panel">
+    <h3>Nueva herramienta</h3>
+    <form method="post" action="{{ url_for('herramienta_nueva') }}">
+      <input type="hidden" name="csrf" value="{{ csrf() }}">
+      <label for="h_n">Nombre</label><input id="h_n" name="nombre" placeholder="Multímetro de alto voltaje" required>
+      <label for="h_v">Valor estimado</label><input id="h_v" name="valor_estimado" inputmode="decimal">
+      <div class="actions"><button class="btn">Guardar herramienta</button></div>
+    </form>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}
