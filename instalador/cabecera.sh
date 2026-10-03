@@ -50,7 +50,7 @@ ok()   { echo -e "${C_OK}[ OK ]${C_RESET} $*"; }
 warn() { echo -e "${C_WARN}[AVISO]${C_RESET} $*"; }
 fail() { echo -e "${C_ERR}[FALLO]${C_RESET} $*" >&2; exit 1; }
 
-uso() { awk 'NR>1 && /^####/ {exit} NR>1' "$0" | sed 's/^# \{0,1\}//'; }
+uso() { awk '/^####/ { n++; if (n == 2) exit; next } n == 1 { print }' "$0" | sed 's/^# \{0,1\}//'; }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
