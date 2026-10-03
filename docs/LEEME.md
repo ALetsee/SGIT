@@ -83,6 +83,7 @@ Resumen en `SEGURIDAD_ASVS.md` (autoevaluación por capítulo de ASVS 5.0.0, con
 
 ## Desarrollo, versiones y migraciones
 - Versión actual en `VERSION`; historial en `CHANGELOG.md`; el código fuente está en un repositorio git (`sgit-codigo-fuente.tar.gz`).
+- **Reconstruir el instalador** desde el código fuente: `./instalador/construir.sh` genera `sgit-instalador.sh` (la cabecera del instalador está en `instalador/cabecera.sh`).
 - **Cada cambio del esquema** de la base es un archivo `database/migraciones/NNN_descripcion.sql` (una transacción que termina insertando su versión en `schema_version`), más el mismo cambio en `database/schema.sql` (instalaciones nuevas). Las columnas nuevas van al final de la tabla. `scripts/prueba_migracion.sh` crea una base con el esquema histórico (`database/historial/schema_v3.sql`), le aplica las migraciones y comprueba que queda **idéntica** a una instalación nueva.
 - `docs/API.md` se genera con `scripts/generar_api_md.py` leyendo las rutas del código.
 - Recompilar la API: `cd /opt/sgit/src/backend-go && sudo GO111MODULE=off GOPATH=/usr/share/gocode go build -o /opt/sgit/bin/sgit-api . && sudo systemctl restart sgit-api`. Reinstalar sobrescribe `/opt/sgit`: guarda tus cambios también en tu copia del proyecto.

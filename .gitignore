@@ -4,3 +4,5 @@ __pycache__/
 demo_credenciales.txt
 *.env
 *.enc
+*.tgz
+sgit-instalador.sh
