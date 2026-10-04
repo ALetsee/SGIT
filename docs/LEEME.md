@@ -1,5 +1,5 @@
 # SGIT - Sistema de Gestión Integral de Taller
-Electro-Motor Services · ERS-EMS-2026-001 · versión 1.1.0
+Electro-Motor Services · ERS-EMS-2026-001 · versión 1.1.1
 
 ## Tecnología
 | Capa | Tecnología | Dónde vive |
@@ -51,7 +51,7 @@ python3 /opt/sgit/scripts/cargar_demo.py             # carga personal, clientes,
 `reiniciar_datos.sh` pide escribir `BORRAR`, hace un respaldo antes y reinicia los folios. **Solo para pruebas o demostración**: borra también la bitácora. Los usuarios no se pueden borrar uno por uno (tienen historial); desactívalos en *Equipo*.
 
 ## Respaldos y recuperación ante desastre
-Cada noche a las 2:30 se genera, cifrado con AES-256 y verificado, en `/var/backups/sgit` (retención de 30 días):
+Cada noche a las 2:30 (hora del taller) se genera, cifrado con AES-256 y verificado, en `/var/backups/sgit` (retención de 30 días):
 - `bd_*.sql.gz.enc`: volcado de la base (restauración sencilla).
 - `base_*.tar.gz.enc`: **copia base** de PostgreSQL.
 - `fotos_*.tar.gz.enc`: fotografías.
@@ -68,13 +68,13 @@ openssl enc -d -aes-256-cbc -pbkdf2 -pass file:/etc/sgit/respaldo.key -in /var/b
 **Recuperar a un momento exacto:** el procedimiento completo está escrito como código en `/opt/sgit/scripts/prueba_respaldo_wal.sh` (descifra la copia base, la extrae en una carpeta aparte, define `recovery_target_time` y arranca PostgreSQL hasta ese punto). Se prueba con `sudo sgit-probar --respaldo` (unos 15 segundos, no toca la base real). Para una recuperación real, sigue los mismos pasos sobre un clúster detenido y vacío: extrae la copia base en el directorio de datos, crea `recovery.signal`, define en `postgresql.auto.conf` `restore_command = 'cp /var/backups/sgit_wal/%f %p'` y `recovery_target_time = 'AAAA-MM-DD HH:MM:SS'`, y arranca.
 
 ## Disponibilidad
-Cada minuto, `sgit-salud` verifica la API (y su base de datos), la web y Nginx, registra el resultado en `/var/log/sgit_salud.log` y **reinicia** lo que no responda. Los servicios arrancan solos tras un reinicio del servidor. `sgit-disponibilidad` calcula el porcentaje real (meta: 99 % en horario laboral, lunes a viernes de 8 a 19 h; con `--sabado` incluye sábados). El dato se acumula con el uso: con menos de un día de registros no es concluyente.
+Cada minuto, `sgit-salud` verifica la API (y su base de datos), la web y Nginx, registra el resultado en `/var/log/sgit_salud.log` y **reinicia** lo que no responda. Los servicios arrancan solos tras un reinicio del servidor. `sgit-disponibilidad` calcula el porcentaje real (meta: 99 % en horario laboral, lunes a viernes de 8 a 19 h **hora del taller**, según `SGIT_TZ`; con `--sabado` incluye sábados). El dato se acumula con el uso: con menos de un día de registros no es concluyente.
 
 ## Pruebas
 ```bash
-sudo sgit-probar              # reglas de negocio (25), seguridad (38) y migraciones (6); seguro, no deja datos
+sudo sgit-probar              # reglas de negocio (25), seguridad (39) y migraciones (6); seguro, no deja datos
 sudo sgit-probar --respaldo   # además, recuperación a un momento exacto (9)
-sudo sgit-probar --completo   # todo lo anterior y además API (144), pantallas (126) y concurrencia (8): 356 en total
+sudo sgit-probar --completo   # todo lo anterior y además API (144), pantallas (126) y concurrencia (8): 357 en total
 ```
 La prueba completa crea registros con el prefijo PRUEBA; la bitácora es inmutable, así que no se pueden borrar. Los usuarios de prueba se desactivan solos. Se puede repetir sobre los mismos datos; si la repites más de cuatro veces en menos de 10 minutos, el límite de intentos fallidos de acceso (una defensa que se queda activa a propósito) puede bloquearla: espera 10 minutos o ejecuta `sudo systemctl restart sgit-api`.
 

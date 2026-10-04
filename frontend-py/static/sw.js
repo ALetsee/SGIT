@@ -1,6 +1,6 @@
 // Service worker del SGIT (PWA). Los datos del taller NUNCA se guardan en el dispositivo:
 // solo se guardan los archivos estaticos y una pantalla de aviso para cuando no hay conexion.
-const VERSION = 'sgit-1.1.0';
+const VERSION = 'sgit-1.1.1';
 const PRECARGA = ['/offline', '/static/icon-192.png', '/static/icon.svg'];
 
 self.addEventListener('install', (e) => {

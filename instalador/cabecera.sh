@@ -167,6 +167,11 @@ if [[ -n "$DOMINIO" && -f "/etc/letsencrypt/live/$DOMINIO/fullchain.pem" ]]; the
 [[ -z "$FOTOS_MIN" ]] || set_env FOTOS_MINIMAS "$FOTOS_MIN"
 if [[ $SIN_NGINX -eq 1 ]]; then set_env WEB_BIND 0.0.0.0:8000; set_env SGIT_COOKIE_SECURE 0
 else set_env WEB_BIND 127.0.0.1:8000; set_env SGIT_COOKIE_SECURE 1; fi
+# Zona horaria del taller (el servidor suele estar en UTC): la base, la API y la web la usan para
+# "hoy", los periodos de los reportes y el horario laboral. Se cambia editando SGIT_TZ en sgit.env.
+ZONA="$(grep -E '^SGIT_TZ=' "$ENV_FILE" | head -1 | cut -d= -f2)"; ZONA="${ZONA:-America/Mexico_City}"
+[[ -e "/usr/share/zoneinfo/$ZONA" ]] || fail "La zona horaria '$ZONA' (SGIT_TZ en $ENV_FILE) no existe en este sistema."
+set_env SGIT_TZ "$ZONA"; set_env TZ "$ZONA"
 chown root:sgit "$ENV_FILE"; chmod 640 "$ENV_FILE"
 set -a; . "$ENV_FILE"; set +a
 
@@ -218,6 +223,7 @@ if [[ "$EXISTE" != "1" ]]; then
   pgsu -d "$DB_NAME" < "$TMP/database/schema.sql"
   ok "Esquema aplicado: tablas, reglas RN-01 a RN-06, RLS y privilegios minimos"
 fi
+pgsu -c "ALTER DATABASE $DB_NAME SET timezone TO '$ZONA'" && ok "La base usa la hora del taller ($ZONA)"
 VER_FINAL="$(pgsu -d "$DB_NAME" -tAc "SELECT max(version) FROM schema_version")"
 [[ "$VER_FINAL" == "$ULTIMA" ]] || fail "El esquema quedo en la version $VER_FINAL y se esperaba la $ULTIMA."
 TABLAS="$(pgsu -d "$DB_NAME" -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'")"
@@ -469,9 +475,9 @@ cat > /etc/logrotate.d/sgit <<'EOF'
 }
 EOF
 /usr/local/bin/sgit-salud && ok "Monitoreo de salud activo (cada minuto): sgit-disponibilidad muestra el porcentaje real" || warn "La primera comprobacion de salud fallo; revisa los servicios."
-cat > /etc/cron.d/sgit-respaldo <<'EOF'
-# Respaldo cifrado diario del SGIT (base de datos y fotografias)
-30 2 * * * root /usr/local/bin/sgit-respaldo >> /var/log/sgit_respaldo.log 2>&1
+cat > /etc/cron.d/sgit-respaldo <<EOF
+# Respaldo cifrado diario del SGIT a las 02:30 de la hora del taller ($ZONA); cron corre en la hora del servidor
+30 * * * * root [ "\$(TZ=$ZONA date +\\%H)" = "02" ] && /usr/local/bin/sgit-respaldo >> /var/log/sgit_respaldo.log 2>&1
 EOF
 chmod 644 /etc/cron.d/sgit-respaldo
 if /usr/local/bin/sgit-respaldo; then ok "Primer respaldo cifrado creado y verificado en $BACKUP_DIR"
@@ -493,7 +499,7 @@ echo "  Comandos utiles:"
 echo "    sudo sgit-probar              reglas, seguridad y migraciones (seguro, no deja datos)"
 echo "    sudo sgit-probar --respaldo   recuperacion a un momento exacto (copia base + WAL)"
 echo "    sudo sgit-probar --completo   API y pantallas (crea registros PRUEBA)"
-echo "    sudo sgit-respaldo            respaldo cifrado ahora (ya corre solo a las 2:30)"
+echo "    sudo sgit-respaldo            respaldo cifrado ahora (ya corre solo a las 2:30 hora del taller)"
 echo "    sgit-disponibilidad           disponibilidad real (meta: 99 % en horario laboral)"
 if [[ $SYSTEMD -eq 1 ]]; then
 echo "    systemctl status sgit-api sgit-web      estado de los servicios"

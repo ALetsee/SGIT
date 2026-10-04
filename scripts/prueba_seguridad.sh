@@ -71,6 +71,7 @@ chk "el rol de la aplicación no es superusuario" '[[ "$(PGq "SELECT rolsuper FR
 chk "el rol de la aplicación no puede crear tablas" '! PGPASSWORD="$DB_PASSWORD" psql -h 127.0.0.1 -U "${DB_USER:-app_taller}" -d "${DB_NAME:-taller_db}" -X -q -c "CREATE TABLE sgit_no_debe_existir(x int)" >/dev/null 2>&1'
 chk "la bitácora de auditoría es de solo agregar (sin UPDATE ni DELETE)" '[[ "$(PGq "SELECT count(*) FROM information_schema.role_table_grants WHERE table_name='"'"'auditoria'"'"' AND grantee='"'"'${DB_USER:-app_taller}'"'"' AND privilege_type IN ('"'"'UPDATE'"'"','"'"'DELETE'"'"')")" == "0" ]]'
 chk "los hashes de contraseña son argon2id" '[[ "$(PGq "SELECT count(*) FROM usuario WHERE password_hash NOT LIKE '"'"'\$argon2id\$%'"'"'")" == "0" ]]'
+chk "la base usa la zona horaria del taller (${SGIT_TZ:-America/Mexico_City})" '[[ "$(PGq "SHOW timezone")" == "${SGIT_TZ:-America/Mexico_City}" ]]'
 chk "la seguridad por fila (RLS) está activa en partida" '[[ "$(PGq "SELECT relrowsecurity FROM pg_class WHERE relname='"'"'partida'"'"'")" == "t" ]]'
 
 echo; echo "Resultado: $OK correctas, $FALLO con fallo ($INFO avisos informativos)."

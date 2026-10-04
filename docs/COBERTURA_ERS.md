@@ -1,11 +1,11 @@
-# Cobertura del ERS (versión 1.1.0)
+# Cobertura del ERS (versión 1.1.1)
 
 Estado de cada requisito del ERS-EMS-2026-001, con **dónde se ve** y **cómo se comprueba**.
 Resumen: **42 de 42 requisitos funcionales, 9 de 10 no funcionales y 5 de 5 reglas de negocio**. El que falta (RNF-01) necesita personas reales y no se puede cerrar con código: ver `PRUEBA_USABILIDAD.md`.
 
 Leyenda: ✅ completo y comprobado · 🟡 listo, pero falta algo que no depende del código.
 
-Pruebas automáticas (`sudo sgit-probar --completo`): 25 reglas de negocio en la base, 38 controles de seguridad, 6 de migraciones, 9 de recuperación ante desastre, 144 de API, 126 de pantallas y 8 de concurrencia: **356 comprobaciones**.
+Pruebas automáticas (`sudo sgit-probar --completo`): 25 reglas de negocio en la base, 39 controles de seguridad, 6 de migraciones, 9 de recuperación ante desastre, 144 de API, 126 de pantallas y 8 de concurrencia: **357 comprobaciones**.
 
 ## Módulo A: recepción (RF-01 a RF-07)
 | ID | Estado | Dónde se ve | Cómo se comprueba |
@@ -79,7 +79,7 @@ Pruebas automáticas (`sudo sgit-probar --completo`): 25 reglas de negocio en la
 | RNF-02 | ✅ | Responsiva; manifiesto con iconos PNG y *maskable*; service worker con pantalla sin conexión (nunca guarda datos del taller). *Para instalarla, el navegador debe confiar en el certificado*: con el autofirmado funciona como página normal |
 | RNF-03 | ✅ | Reinicio automático de los servicios; comprobación de salud cada minuto con registro; `sgit-disponibilidad` calcula el porcentaje real (meta 99 % en horario laboral, **el dato se acumula con el uso**). Redes lentas: lista paginada (37 KB con 6,000 órdenes), estáticos versionados con caché de 7 días y compresión gzip |
 | RNF-04 | ✅ | **Medido** con 6,006 órdenes y 18,013 partidas: peor caso 152 ms contra 2,000 ms permitidos (historial de un vehículo con 150 órdenes). Resumen: 8 ms. Máquina de pruebas de 1 CPU |
-| RNF-05 | ✅ | 38 controles automáticos y la tabla por capítulo de `SEGURIDAD_ASVS.md`. **Es una autoevaluación**: falta la validación independiente (pruebas de penetración del equipo) |
+| RNF-05 | ✅ | 39 controles automáticos y la tabla por capítulo de `SEGURIDAD_ASVS.md`. **Es una autoevaluación**: falta la validación independiente (pruebas de penetración del equipo) |
 | RNF-06 | ✅ | Consumo, cobro, cambios de estado y versiones son transaccionales; probado con concurrencia |
 | RNF-07 | ✅ | Respaldo diario cifrado (volcado, copia base y fotografías) y **archivado continuo de WAL**. Probado: restauración a un momento exacto en un clúster aparte (`sudo sgit-probar --respaldo`) |
 | RNF-08 | ✅ | Bitácora inmutable; nada la borra |

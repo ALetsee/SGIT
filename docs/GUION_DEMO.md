@@ -10,7 +10,7 @@ Todo lo que dice este guion se probó con los datos de `cargar_demo.py`: los avi
    python3 /opt/sgit/scripts/cargar_demo.py            # pide correo y contraseña del administrador
    ```
    El script imprime las credenciales de los 4 usuarios de demostración y las guarda en `demo_credenciales.txt` (no lo subas a ningún repositorio). `reiniciar_datos.sh` pide escribir `BORRAR`, hace un respaldo cifrado antes y reinicia los folios.
-2. **Si quieres evidencia de las pruebas, córrelas antes del paso 1**: `sudo sgit-probar --completo` (356 comprobaciones). Deja registros PRUEBA, por eso va antes de reiniciar.
+2. **Si quieres evidencia de las pruebas, córrelas antes del paso 1**: `sudo sgit-probar --completo` (357 comprobaciones). Deja registros PRUEBA, por eso va antes de reiniciar.
 3. **Tres sesiones abiertas a la vez.** Cada navegador guarda una sola sesión, así que usa:
    - Ventana normal de Chrome: **administrador** y **jefe de taller** (cierra una sesión para entrar a la otra).
    - Ventana de incógnito: **recepción**.
@@ -72,7 +72,7 @@ Entra como **jefe de taller**: aterrizas en **Resumen**. Señala las órdenes ab
 ```bash
 sudo sgit-probar
 ```
-Muestra las reglas de negocio (25), los controles de seguridad (38) y las migraciones (6), todos en verde, sin dejar datos. Si hay tiempo: `sudo sgit-probar --respaldo` restaura la base **a un momento exacto** en unos 15 segundos y comprueba que lo posterior al punto no aparece.
+Muestra las reglas de negocio (25), los controles de seguridad (39) y las migraciones (6), todos en verde, sin dejar datos. Si hay tiempo: `sudo sgit-probar --respaldo` restaura la base **a un momento exacto** en unos 15 segundos y comprueba que lo posterior al punto no aparece.
 
 ## Preguntas probables
 | Pregunta | Respuesta corta |

@@ -5,27 +5,30 @@ Uso:  sgit-disponibilidad [--dias 30] [--horario 08-19] [--sabado]
 El horario laboral por defecto es de lunes a viernes de 08:00 a 19:00 (hora del servidor); con --sabado incluye sabados.
 """
 import argparse, datetime as dt, os, sys
+from zoneinfo import ZoneInfo
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--dias", type=int, default=30)
 ap.add_argument("--horario", default="08-19")
 ap.add_argument("--sabado", action="store_true")
+ap.add_argument("--zona", default=os.environ.get("SGIT_TZ") or "America/Mexico_City", help="zona horaria del taller")
 ap.add_argument("--log", default=os.environ.get("SGIT_SALUD_LOG", "/var/log/sgit_salud.log"))
 a = ap.parse_args()
 h0, h1 = (int(x) for x in a.horario.split("-"))
+zona = ZoneInfo(a.zona)   # el servidor suele estar en UTC; el horario laboral es el del taller
 try:
     lineas = open(a.log, encoding="utf-8").read().splitlines()
 except OSError:
     sys.exit(f"No hay registro en {a.log}. El comprobador de salud corre cada minuto desde que se instala.")
 
-desde = dt.datetime.now().astimezone() - dt.timedelta(days=a.dias)
+desde = dt.datetime.now(zona) - dt.timedelta(days=a.dias)
 todo, laboral = [], []
 for l in lineas:
     p = l.split()
     if len(p) < 2 or p[1] not in ("OK", "FALLO"):
         continue
     try:
-        t = dt.datetime.fromisoformat(p[0]).astimezone()
+        t = dt.datetime.fromisoformat(p[0]).astimezone(zona)
     except ValueError:
         continue
     if t < desde:
@@ -51,7 +54,7 @@ def resumen(nombre, datos):
     print(f"{nombre:28} {pct:7.3f} %   ({ok} de {len(datos)} comprobaciones, {inc} incidente(s), peor caída ~{peor} min)")
     return pct
 
-print(f"Disponibilidad de los últimos {a.dias} días (una comprobación por minuto)")
+print(f"Disponibilidad de los últimos {a.dias} días (una comprobación por minuto; horas de {a.zona})")
 if todo:
     dias = (todo[-1][0] - todo[0][0]).total_seconds() / 86400
     print(f"Datos desde {todo[0][0]:%d/%m/%Y %H:%M} hasta {todo[-1][0]:%d/%m/%Y %H:%M} ({dias:.1f} días)")

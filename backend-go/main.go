@@ -15,7 +15,7 @@ import (
 	_ "github.com/lib/pq"
 )
 
-const version = "1.1.0"
+const version = "1.1.1"
 
 type Config struct {
 	DBURL     string

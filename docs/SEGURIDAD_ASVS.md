@@ -2,7 +2,7 @@
 
 **Alcance y honestidad:** este documento es una **autoevaluación por capítulo**, hecha por el equipo de desarrollo. No es una certificación ni sustituye las pruebas de penetración independientes (a cargo de quien tenga el rol de seguridad del proyecto). No numera requisitos individuales de ASVS: describe, capítulo por capítulo, qué control existe y dónde se comprueba.
 
-Comprobación automática: `sudo sgit-probar` ejecuta 38 controles (`prueba_seguridad.sh`); `sudo sgit-probar --completo` agrega las pruebas de API y pantallas que cubren sesiones, contraseñas, CSRF, XSS e inyección.
+Comprobación automática: `sudo sgit-probar` ejecuta 39 controles (`prueba_seguridad.sh`); `sudo sgit-probar --completo` agrega las pruebas de API y pantallas que cubren sesiones, contraseñas, CSRF, XSS e inyección.
 
 | Capítulo ASVS | Estado | Control en el sistema | Dónde se comprueba |
 |---|---|---|---|
