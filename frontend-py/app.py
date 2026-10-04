@@ -46,6 +46,26 @@ def _version_estaticos():
 
 ASSET_V = _version_estaticos()
 
+# Cada concepto de la cotizacion se mide en algo distinto: horas, piezas o trabajos.
+# (etiqueta de la cantidad, etiqueta del costo, abreviatura que se muestra junto a la cantidad)
+UNIDAD = {
+    "MANO_OBRA": ("Horas de mano de obra", "Costo por hora (sin margen ni IVA)", "h"),
+    "REFACCION_NUEVA": ("Piezas", "Costo por pieza (sin margen ni IVA)", "pzas"),
+    "REFACCION_RECONSTRUIDA": ("Piezas", "Costo por pieza (sin margen ni IVA)", "pzas"),
+    "TRABAJO_EXTERNO": ("Trabajos", "Costo por trabajo (sin margen ni IVA)", "trab."),
+    "SERVICIO_ELECTRICO": ("Servicios", "Costo por servicio (sin margen ni IVA)", "serv."),
+}
+
+
+def cant_u(concepto, cantidad):
+    """'3 h', '2 pzas', '1 trab.': la cantidad con la unidad que corresponde a su concepto."""
+    try:
+        f = float(cantidad)
+        txt = str(int(f)) if f == int(f) else f"{f:g}"
+    except (TypeError, ValueError):
+        return "—"
+    return f"{txt} {UNIDAD.get(concepto, ('', '', ''))[2]}".strip()
+
 # ---------------------------------------------------------------- catalogos
 ESTADOS = ["RECEPCION", "DIAGNOSTICO", "ESPERA_REFACCION", "REPARACION", "PRUEBAS_RUTA", "TERMINADA", "ENTREGADO"]
 LBL = {"RECEPCION": "Recepción", "DIAGNOSTICO": "Diagnóstico", "ESPERA_REFACCION": "Espera de refacción",
@@ -225,7 +245,7 @@ def f_n(v):
         return "—"
 
 
-app.jinja_env.globals.update(asset_v=ASSET_V, csrf=csrf_token, puede=puede, usuario=usuario, ESTADOS=ESTADOS, LBL=LBL, ROLES=ROLES,
+app.jinja_env.globals.update(UNIDAD=UNIDAD, cant_u=cant_u, asset_v=ASSET_V, csrf=csrf_token, puede=puede, usuario=usuario, ESTADOS=ESTADOS, LBL=LBL, ROLES=ROLES,
                              ESPEC=ESPEC, CONCEPTOS=CONCEPTOS, MEDIOS=MEDIOS, TIPOS_MOTOR=TIPOS_MOTOR, RETRASOS=RETRASOS)
 
 

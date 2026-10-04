@@ -20,7 +20,7 @@
   <h3 style="margin-top:20px">Trabajos y refacciones autorizados</h3>
   <table>
     <thead><tr><th>Descripción</th><th class="num">Cantidad</th><th class="num">Importe</th></tr></thead>
-    <tbody>{% for p in s.partidas %}<tr><td>{{ p.descripcion or CONCEPTOS[p.concepto] }}</td><td class="num">{{ p.cantidad|n }}</td><td class="num">{{ p.precio_cliente|money }}</td></tr>{% endfor %}</tbody>
+    <tbody>{% for p in s.partidas %}<tr><td>{{ p.descripcion or CONCEPTOS[p.concepto] }}</td><td class="num">{{ cant_u(p.concepto, p.cantidad) }}</td><td class="num">{{ p.precio_cliente|money }}</td></tr>{% endfor %}</tbody>
     <tfoot><tr><td colspan="2">Total</td><td class="num">{{ s.total|money }}</td></tr></tfoot>
   </table>
   <h3 style="margin-top:20px">Pagos</h3>

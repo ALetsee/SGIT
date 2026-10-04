@@ -183,7 +183,7 @@
       {% for p in cot.partidas %}
       <tr>
         <td><strong>{{ CONCEPTOS[p.concepto] }}</strong><br><small>{{ p.descripcion or '' }}</small></td>
-        <td class="num">{{ p.cantidad|n }}</td>
+        <td class="num">{{ cant_u(p.concepto, p.cantidad) }}</td>
         {% if priv %}<td class="num">{{ p.costo|money }}</td><td class="num">{{ p.margen_pct|n }}%</td><td class="num">{{ p.impuesto_pct|n }}%</td>{% endif %}
         <td class="num">{{ p.precio_cliente|money }}</td>
         <td>
@@ -207,8 +207,8 @@
             <form method="post" action="{{ url_for('partida_precio', pid=p.id) }}">
               <input type="hidden" name="csrf" value="{{ csrf() }}"><input type="hidden" name="volver" value="{{ ruta }}">
               <div class="row2">
-                {% if not p.refaccion_id %}<div><label>Cantidad</label><input name="cantidad" value="{{ p.cantidad|n }}"></div>{% endif %}
-                <div><label>Costo unitario</label><input name="costo" value="{{ p.costo }}"></div>
+                {% if not p.refaccion_id %}<div><label>{{ UNIDAD[p.concepto][0] }}</label><input name="cantidad" value="{{ p.cantidad|n }}"></div>{% endif %}
+                <div><label>{{ UNIDAD[p.concepto][1] }}</label><input name="costo" value="{{ p.costo }}"></div>
                 <div><label>Margen %</label><input name="margen_pct" value="{{ p.margen_pct|n }}"></div>
                 <div><label>IVA %</label><input name="impuesto_pct" value="{{ p.impuesto_pct|n }}"></div>
               </div>
@@ -243,10 +243,10 @@
       <form method="post" action="{{ url_for('orden_accion', ot_id=ot.id, nombre='partida') }}">
         <input type="hidden" name="csrf" value="{{ csrf() }}">
         <label for="concepto">Concepto</label>
-        <select id="concepto" name="concepto" required>{% for k, v in CONCEPTOS.items() if k != 'REFACCION_NUEVA' %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select>
+        <select id="concepto" name="concepto" required>{% for k, v in CONCEPTOS.items() if k != 'REFACCION_NUEVA' %}<option value="{{ k }}" data-cant="{{ UNIDAD[k][0] }}" data-costo="{{ UNIDAD[k][1] }}">{{ v }}</option>{% endfor %}</select>
         <label for="pdesc">Descripción</label><input id="pdesc" name="descripcion" required>
-        <div class="row2"><div><label for="pcant">Cantidad (horas o piezas)</label><input id="pcant" name="cantidad" inputmode="decimal" value="1" required></div>
-        <div><label for="pcosto">Costo unitario (sin margen ni IVA)</label><input id="pcosto" name="costo" inputmode="decimal" required></div></div>
+        <div class="row2"><div><label for="pcant" id="lbl-pcant">Horas de mano de obra</label><input id="pcant" name="cantidad" inputmode="decimal" value="1" required></div>
+        <div><label for="pcosto" id="lbl-pcosto">Costo por hora (sin margen ni IVA)</label><input id="pcosto" name="costo" inputmode="decimal" required></div></div>
         {% if puede('ADMIN') %}<div class="row2"><div><label for="pm">Margen % (vacío = el configurado)</label><input id="pm" name="margen_pct" inputmode="decimal"></div>
         <div><label for="pi">IVA % (vacío = el configurado)</label><input id="pi" name="impuesto_pct" inputmode="decimal"></div></div>{% endif %}
         <p class="hint">El precio al cliente se calcula solo con el margen y el impuesto vigentes.</p>
@@ -265,7 +265,7 @@
           <td>{{ v.motivo }}
             <details><summary>Ver partidas de esta versión</summary>
               <table><thead><tr><th>Concepto</th><th class="num">Cant.</th><th class="num">Costo u.</th><th class="num">Precio</th><th>Autoriz.</th></tr></thead><tbody>
-              {% for p in v.partidas %}<tr><td>{{ p.descripcion or CONCEPTOS[p.concepto] }}</td><td class="num">{{ p.cantidad|n }}</td><td class="num">{{ p.costo|money }}</td><td class="num">{{ p.precio_cliente|money }}</td><td>{{ 'Sí' if p.autorizada else 'No' }}</td></tr>{% endfor %}
+              {% for p in v.partidas %}<tr><td>{{ p.descripcion or CONCEPTOS[p.concepto] }}</td><td class="num">{{ cant_u(p.concepto, p.cantidad) }}</td><td class="num">{{ p.costo|money }}</td><td class="num">{{ p.precio_cliente|money }}</td><td>{{ 'Sí' if p.autorizada else 'No' }}</td></tr>{% endfor %}
               </tbody></table>
             </details></td>
           <td class="num">{{ v.total_cotizado|money }}</td><td class="num">{{ v.total_autorizado|money }}</td></tr>
@@ -296,7 +296,7 @@
     {% endif %}
     {% if consumos %}
     <div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Pieza</th><th class="num">Cant.</th><th>Registró</th></tr></thead><tbody>
-      {% for c in consumos %}<tr><td>{{ c.creado_en|fecha }}</td><td>{{ c.refaccion }}</td><td class="num">{{ c.cantidad|n }}</td><td>{{ c.usuario or '—' }}</td></tr>{% endfor %}
+      {% for c in consumos %}<tr><td>{{ c.creado_en|fecha }}</td><td>{{ c.refaccion }}</td><td class="num">{{ c.cantidad|n }} pzas</td><td>{{ c.usuario or '—' }}</td></tr>{% endfor %}
     </tbody></table></div>
     {% elif rol not in ('TECNICO','JEFE_TALLER','ADMIN') %}<p class="hint">Aún no se han consumido piezas.</p>{% endif %}
   </section>

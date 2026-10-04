@@ -278,6 +278,13 @@ anota(f"<script>alert('{S}')" not in cl and "&lt;script&gt;" in cl, "XSS: un nom
 cab = anon.c.get("/login")
 anota("camera=(self)" in cab.headers.get("Permissions-Policy", "") and "frame-ancestors 'none'" in cab.headers.get("Content-Security-Policy", ""), "cabeceras de seguridad: Permissions-Policy y CSP presentes")
 
+print("== Unidades de la cotización (horas, piezas, trabajos) ==")
+oj = html(jefe.get(f"/ordenes/{ot}"))
+of = html(jefe.get(f"/ordenes/{ot_tab}"))   # el formulario de partidas solo existe en una orden abierta
+anota("Horas de mano de obra" in of and "Costo por hora" in of and "Cantidad (horas o piezas)" not in of, "el formulario de partidas no mezcla horas con piezas", of[:200])
+anota('data-cant="Piezas"' in of and 'data-cant="Trabajos"' in of and 'data-cant="Servicios"' in of, "cada concepto trae su propia etiqueta (piezas, trabajos, servicios)")
+anota(re.search(r'>3 h<', oj) is not None and re.search(r'>2 pzas<', oj) is not None, "la cotización muestra «3 h» para la mano de obra y «2 pzas» para la pieza")
+
 print("== Cierre de sesión ==")
 r = adm.post("/logout")
 anota("Iniciar sesión" in html(r) or "Entrar" in html(r), "cerrar sesión devuelve al login")

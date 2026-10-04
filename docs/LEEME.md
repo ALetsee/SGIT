@@ -1,5 +1,5 @@
 # SGIT - Sistema de Gestión Integral de Taller
-Electro-Motor Services · ERS-EMS-2026-001 · versión 1.1.1
+Electro-Motor Services · ERS-EMS-2026-001 · versión 1.1.2
 
 ## Tecnología
 | Capa | Tecnología | Dónde vive |
@@ -74,7 +74,7 @@ Cada minuto, `sgit-salud` verifica la API (y su base de datos), la web y Nginx, 
 ```bash
 sudo sgit-probar              # reglas de negocio (25), seguridad (39) y migraciones (6); seguro, no deja datos
 sudo sgit-probar --respaldo   # además, recuperación a un momento exacto (9)
-sudo sgit-probar --completo   # todo lo anterior y además API (144), pantallas (126) y concurrencia (8): 357 en total
+sudo sgit-probar --completo   # todo lo anterior y además API (144), pantallas (129) y concurrencia (8): 360 en total
 ```
 La prueba completa crea registros con el prefijo PRUEBA; la bitácora es inmutable, así que no se pueden borrar. Los usuarios de prueba se desactivan solos. Se puede repetir sobre los mismos datos; si la repites más de cuatro veces en menos de 10 minutos, el límite de intentos fallidos de acceso (una defensa que se queda activa a propósito) puede bloquearla: espera 10 minutos o ejecuta `sudo systemctl restart sgit-api`.
 

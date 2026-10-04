@@ -27,6 +27,20 @@ document.addEventListener('submit', function (e) {
   sel.addEventListener('change', ajustar); ajustar();
 })();
 
+// Cotizacion: la cantidad y el costo se miden distinto segun el concepto (horas, piezas, trabajos, servicios).
+(function () {
+  var sel = document.getElementById('concepto');
+  if (!sel) return;
+  var lc = document.getElementById('lbl-pcant'), lk = document.getElementById('lbl-pcosto');
+  function ajustar() {
+    var o = sel.options[sel.selectedIndex];
+    if (!o) return;
+    if (lc) lc.textContent = o.getAttribute('data-cant') || 'Cantidad';
+    if (lk) lk.textContent = o.getAttribute('data-costo') || 'Costo unitario (sin margen ni IVA)';
+  }
+  sel.addEventListener('change', ajustar); ajustar();
+})();
+
 // RNF-02: aplicacion instalable y con aviso claro cuando no hay conexion.
 // (Requiere HTTPS con certificado en el que el dispositivo confie.)
 if ('serviceWorker' in navigator) {

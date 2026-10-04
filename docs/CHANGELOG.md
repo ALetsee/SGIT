@@ -1,5 +1,8 @@
 # Registro de cambios
 
+## 1.1.2
+- Cotización: la cantidad se muestra y se pide con la unidad de su concepto (horas de mano de obra, piezas, trabajos, servicios) en el formulario, la tabla, el historial de versiones y la orden de salida; antes decía «horas o piezas».
+
 ## 1.1.1
 - Zona horaria del taller (`SGIT_TZ`, por defecto America/Mexico_City): la base, la API y la web la usan. Corrige que, con el servidor en UTC, «entregadas hoy» y los periodos de los reportes se cortaran a las 18:00 locales, que `sgit-disponibilidad` midiera el horario laboral en UTC y que el respaldo «de las 2:30» corriera a las 20:30 locales.
 
@@ -24,7 +27,7 @@
 - Lista de órdenes paginada, compresión gzip y estáticos con caché larga.
 - Migraciones de la base numeradas (`database/migraciones`), aplicadas por el instalador con respaldo previo, y prueba que las compara con una instalación nueva.
 - Certificado de Let's Encrypt opcional (`--letsencrypt`).
-- `sgit-probar` con modos (`--respaldo`, `--completo`); 357 comprobaciones automáticas.
+- `sgit-probar` con modos (`--respaldo`, `--completo`); 360 comprobaciones automáticas.
 
 **Esquema:** versión 3 → 4 (`004_v4.sql`).
 
