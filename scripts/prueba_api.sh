@@ -59,9 +59,12 @@ mk "{\"nombre\":\"PRUEBA Recepcion\",\"email\":\"rec-$S@prueba.test\",\"password
 mk "{\"nombre\":\"PRUEBA Tecnico HV\",\"email\":\"hv-$S@prueba.test\",\"password\":\"$PW\",\"rol\":\"TECNICO\",\"especialidad\":\"CERTIFICADO_ALTA_TENSION\"}"; check "admin crea técnico certificado HV" 201
 TEC_HV_ID="$(j id)"
 mk "{\"nombre\":\"PRUEBA Tecnico Mec\",\"email\":\"mec-$S@prueba.test\",\"password\":\"$PW\",\"rol\":\"TECNICO\",\"especialidad\":\"MECANICO_TRADICIONAL\"}"; check "admin crea técnico mecánico" 201
+TEC_MEC_ID="$(j id)"
+mk "{\"nombre\":\"PRUEBA Tecnico Otro\",\"email\":\"otro-$S@prueba.test\",\"password\":\"$PW\",\"rol\":\"TECNICO\",\"especialidad\":\"MECANICO_TRADICIONAL\"}"; check "admin crea un tercer técnico (sin asignaciones)" 201
 mk "{\"nombre\":\"X\",\"email\":\"x-$S@prueba.test\",\"password\":\"$PW\",\"rol\":\"RECEPCION\",\"especialidad\":\"MECANICA_PESADA\"}"; check "solo técnicos pueden tener especialidad" 400
 TJ="$(login "jefe-$S@prueba.test" "$PW")"; TR="$(login "rec-$S@prueba.test" "$PW")"
 TH="$(login "hv-$S@prueba.test" "$PW")"; TM="$(login "mec-$S@prueba.test" "$PW")"
+TO="$(login "otro-$S@prueba.test" "$PW")"
 req POST /usuarios "$TR" '{"nombre":"Z","email":"z@x.test","password":"Abcdefgh1","rol":"ADMIN"}'; check "recepción NO puede crear usuarios" 403
 req POST /clientes "$TH" '{"nombre":"Z"}'; check "técnico NO puede dar de alta clientes" 403
 req POST /clientes "$TR" '{"nombre":"Z","campo_extra":1}'; check "campos desconocidos se rechazan" 400
@@ -248,6 +251,54 @@ for i in 1 2 3 4 5; do req POST /auth/login "" "{\"email\":\"fuerza-$S@prueba.te
 req POST /auth/login "" "{\"email\":\"fuerza-$S@prueba.test\",\"password\":\"intento6\"}"; check "tras 5 fallos se bloquea el login" 429
 req PATCH /usuarios/$TEC_HV_ID "$TA" '{"activo":false}'; check "admin desactiva un usuario" 200
 req GET /ordenes-trabajo "$TH"; check "un usuario desactivado pierde el acceso al instante" 401
+
+echo "== Reglas de la prueba de penetración (RN-07 a RN-10) ==="
+req POST /ordenes-trabajo "$TR" "{\"vehiculo_id\":\"$VCB\",\"nivel_combustible_pct\":60}"; check "OT 4 para las reglas nuevas" 201
+OT4="$(j id)"
+req PATCH /ordenes-trabajo/$OT4/estado "$TJ" '{"estado":"REPARACION"}'; check "RN-07: no se salta de RECEPCION a REPARACION" 409
+req GET /ordenes-trabajo/$OT4/inspeccion "$TJ"; MIN4="$(j minimas)"
+for i in $(seq 1 "${MIN4:-0}"); do
+  curl -s -o /dev/null -X POST "$API/ordenes-trabajo/$OT4/fotografias" -H "Authorization: Bearer $TR" -F "foto=@$PNG;type=image/png"
+done
+req PATCH /ordenes-trabajo/$OT4/estado "$TJ" '{"estado":"DIAGNOSTICO"}'; check "pasa a DIAGNOSTICO" 200
+req PATCH /ordenes-trabajo/$OT4/asignar-tecnico "$TJ" "{\"tecnico_id\":\"$TEC_MEC_ID\"}"; check "jefe asigna el técnico mecánico a la OT 4" 200
+req PATCH /ordenes-trabajo/$OT4/estado "$TO" '{"estado":"REPARACION"}'; check "un técnico NO asignado no puede moverla (configuración por defecto)" 403
+req PATCH /ordenes-trabajo/$OT4/estado "$TM" '{"estado":"REPARACION"}'; check "el técnico asignado sí puede moverla" 200
+req PATCH /ordenes-trabajo/$OT4/estado "$TM" '{"estado":"PRUEBAS_RUTA"}'; check "pasa a PRUEBAS_RUTA" 200
+req PATCH /ordenes-trabajo/$OT4/estado "$TM" '{"estado":"TERMINADA"}'; check "pasa a TERMINADA" 200
+req PATCH /ordenes-trabajo/$OT4/estado "$TR" '{"estado":"ENTREGADO"}'; check "RN-09: no se entrega sin ningún trabajo autorizado con costo" 409
+req POST /ordenes-trabajo/$OT4/sin-cargo "$TR" '{"motivo":"Garantía de fábrica"}'; check "recepción NO autoriza la entrega sin cargo" 403
+req POST /ordenes-trabajo/$OT4/sin-cargo "$TJ" '{"motivo":"x"}'; check "el motivo debe ser explicativo (10+ caracteres)" 400
+req POST /ordenes-trabajo/$OT4/sin-cargo "$TJ" '{"motivo":"Garantía de fábrica por falla previa"}'; check "el jefe autoriza la entrega sin cargo" 200
+req PATCH /ordenes-trabajo/$OT4/estado "$TR" '{"estado":"ENTREGADO"}'; check "RN-09: con la autorización sí se entrega" 200
+req PATCH /ordenes-trabajo/$OT4/estado "$TJ" '{"estado":"REPARACION"}'; check "RN-07: una orden entregada no se reabre" 409
+req POST /ordenes-trabajo/$OT4/partidas "$TJ" '{"concepto":"MANO_OBRA","descripcion":"PRUEBA intento tardio","cantidad":1,"costo":1}'; check "RN-08: una orden entregada ya no admite partidas nuevas" 409
+
+req POST /ordenes-trabajo "$TR" "{\"vehiculo_id\":\"$VCB\",\"nivel_combustible_pct\":60}"; check "OT 5 para pagos y anulación (RN-10)" 201
+OT5="$(j id)"
+req GET /ordenes-trabajo/$OT5/inspeccion "$TJ"; MIN5="$(j minimas)"
+for i in $(seq 1 "${MIN5:-0}"); do
+  curl -s -o /dev/null -X POST "$API/ordenes-trabajo/$OT5/fotografias" -H "Authorization: Bearer $TR" -F "foto=@$PNG;type=image/png"
+done
+req POST /ordenes-trabajo/$OT5/partidas "$TJ" '{"concepto":"MANO_OBRA","descripcion":"PRUEBA mano de obra","cantidad":2,"costo":100}'; check "jefe cotiza en la OT 5" 201
+req POST /ordenes-trabajo/$OT5/autorizar-todas "$TR" '{"medio":"FIRMA"}'; check "recepción autoriza todo" 200
+req GET /ordenes-trabajo/$OT5 "$TJ"; TOTAL5="$(j saldo)"
+req POST /ordenes-trabajo/$OT5/pagos "$TR" "{\"monto\":999999,\"metodo\":\"EFECTIVO\",\"tipo\":\"FINAL\"}"; check "RN-10: un pago no puede exceder el saldo" 409
+req POST /ordenes-trabajo/$OT5/pagos "$TR" "{\"monto\":50,\"metodo\":\"EFECTIVO\",\"tipo\":\"ANTICIPO\"}"; check "recepción registra un anticipo" 201
+PAGO5="$(j pago.id)"
+req GET /ordenes-trabajo/$OT5 "$TJ"; SALDO_CON_ANTICIPO="$(j saldo)"
+req POST /pagos/$PAGO5/anular "$TJ" '{"motivo":"Se registró por error"}'; check "el jefe NO puede anular pagos (solo el administrador)" 403
+req POST /pagos/$PAGO5/anular "$TA" '{"motivo":"x"}'; check "anular exige un motivo explicativo" 400
+req POST /pagos/$PAGO5/anular "$TA" '{"motivo":"Se registró por error, el cliente pagó después"}'; check "el administrador anula el pago" 200
+req GET /ordenes-trabajo/$OT5 "$TJ"; expect "RN-10: al anular, el saldo se restituye" "$(j saldo)" "$TOTAL5"
+req POST /pagos/$PAGO5/anular "$TA" '{"motivo":"Intento de anular de nuevo"}'; check "un pago ya anulado no se vuelve a anular" 409
+req POST /ordenes-trabajo/$OT5/pagos "$TR" "{\"monto\":$TOTAL5,\"metodo\":\"TARJETA\",\"tipo\":\"FINAL\"}"; check "se cobra de nuevo tras la anulación" 201
+req PATCH /ordenes-trabajo/$OT5/estado "$TJ" '{"estado":"DIAGNOSTICO"}'; check "OT5 pasa a DIAGNOSTICO" 200
+req PATCH /ordenes-trabajo/$OT5/estado "$TJ" '{"estado":"REPARACION"}'; check "OT5 pasa a REPARACION" 200
+req PATCH /ordenes-trabajo/$OT5/estado "$TJ" '{"estado":"PRUEBAS_RUTA"}'; check "OT5 pasa a PRUEBAS_RUTA" 200
+req PATCH /ordenes-trabajo/$OT5/estado "$TJ" '{"estado":"TERMINADA"}'; check "OT5 pasa a TERMINADA" 200
+req PATCH /ordenes-trabajo/$OT5/estado "$TR" '{"estado":"ENTREGADO"}'; check "se entrega con el saldo en cero" 200
+req POST /ordenes-trabajo/$OT5/pagos "$TR" '{"monto":1,"metodo":"EFECTIVO","tipo":"ANTICIPO"}'; check "RN-08: no se registran pagos en una orden ya entregada" 409
 
 echo
 echo "Resultado: $OK correctas, $FAIL con fallo."

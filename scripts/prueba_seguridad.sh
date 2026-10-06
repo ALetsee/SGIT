@@ -23,6 +23,12 @@ chk "Nginx no revela su versión" '! curl -skI $HTTPS/login | grep -iE "^server:
 if curl -skI $HTTPS/login | grep -qi "strict-transport-security"; then ok "HSTS activo (certificado válido)"
 else info "HSTS desactivado a propósito: con certificado autofirmado bloquearía el acceso. Se activa con --letsencrypt."; fi
 else info "instalación sin Nginx (--sin-nginx): no hay TLS que verificar; la web viaja sin cifrado"; fi
+if [[ $NGINX -eq 1 ]]; then
+chk "TLS 1.2 no acepta el intercambio de llaves RSA (sin secreto perfecto hacia adelante)" \
+  '! echo | openssl s_client -connect 127.0.0.1:443 -tls1_2 -cipher "kRSA" 2>/dev/null | grep -q "Cipher is [A-Z]"'
+chk "TLS 1.2 no acepta cifrado CBC" \
+  '! echo | openssl s_client -connect 127.0.0.1:443 -tls1_2 -cipher "ECDHE-RSA-AES128-SHA" 2>/dev/null | grep -q "Cipher is [A-Z]"'
+fi
 
 echo "== Cabeceras y cookies de la web =="
 curl -sk -D "$H" -o /dev/null $HTTPS/login
@@ -42,6 +48,10 @@ chk "la API rechaza un token falso (401)" '[[ "$(curl -s -o /dev/null -w "%{http
 chk "un token con algoritmo 'none' se rechaza (401)" 'T="$(printf "{\"alg\":\"none\",\"typ\":\"JWT\"}" | base64 -w0 | tr "+/" "-_" | tr -d "=").$(printf "{\"sub\":\"00000000-0000-0000-0000-000000000000\",\"exp\":9999999999}" | base64 -w0 | tr "+/" "-_" | tr -d "=")."; [[ "$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $T" http://127.0.0.1:8081/usuarios)" == "401" ]]'
 chk "las rutas inexistentes no filtran trazas internas" '! curl -sk $HTTPS/no-existe-xyz | grep -qiE "traceback|werkzeug|goroutine|panic"'
 chk "la API responde JSON genérico ante rutas inexistentes" 'curl -s http://127.0.0.1:8081/no-existe | grep -q "statusCode"'
+chk "una redirección manipulada (?next=) no saca a la persona del sitio" \
+  '[[ "$(curl -sk -o /dev/null -D - "$HTTPS/login?next=/%09/evil.example" -d "csrf=x" 2>/dev/null | grep -i ^location: | grep -cE "location:\s*(https?:)?//[^/]")" == "0" ]]'
+chk "cinco intentos de contraseña EN PARALELO se cuentan igual que en serie (RN de limitación de intentos)" \
+  'C="sgitparalelo-$RANDOM@prueba.local"; for i in 1 2 3 4 5 6 7 8; do curl -s -o /dev/null -w "%{http_code}\n" -X POST http://127.0.0.1:8081/auth/login -H "Content-Type: application/json" -d "{\"email\":\"$C\",\"password\":\"x\"}" & done | sort | uniq -c | grep -q "429" '
 
 echo "== Exposición de servicios =="
 solo_local() { # puerto
@@ -57,6 +67,11 @@ else ok "la web interna (8000) solo escucha en localhost"; fi
 echo "== Archivos, secretos y procesos =="
 perm() { stat -c '%a %U:%G' "$1" 2>/dev/null; }
 chk "sgit.env es 640 root:sgit" '[[ "$(perm /etc/sgit/sgit.env)" == "640 root:sgit" ]]'
+if [[ -f /etc/sgit/sgit-web.env ]]; then
+chk "sgit-web.env es 640 root:sgit" '[[ "$(perm /etc/sgit/sgit-web.env)" == "640 root:sgit" ]]'
+chk "el proceso WEB no recibe DB_PASSWORD ni JWT_SECRET (solo la API los necesita)" \
+  'P="$(pgrep -x gunicorn | head -1)"; [[ -z "$P" ]] || ! tr "\0" "\n" < "/proc/$P/environ" 2>/dev/null | grep -qE "^(DB_PASSWORD|JWT_SECRET)="'
+fi
 chk "la llave de respaldos es 600" '[[ "$(perm /etc/sgit/respaldo.key | cut -d" " -f1)" == "600" ]]'
 [[ -f /etc/sgit/tls/sgit.key ]] && chk "la llave privada TLS es 600" '[[ "$(perm /etc/sgit/tls/sgit.key | cut -d" " -f1)" == "600" ]]'
 chk "los respaldos están en un directorio privado (750 o más estricto)" '[[ "$(stat -c %a /var/backups/sgit)" =~ ^7[05]0$ ]]'
@@ -71,6 +86,8 @@ chk "el rol de la aplicación no es superusuario" '[[ "$(PGq "SELECT rolsuper FR
 chk "el rol de la aplicación no puede crear tablas" '! PGPASSWORD="$DB_PASSWORD" psql -h 127.0.0.1 -U "${DB_USER:-app_taller}" -d "${DB_NAME:-taller_db}" -X -q -c "CREATE TABLE sgit_no_debe_existir(x int)" >/dev/null 2>&1'
 chk "la bitácora de auditoría es de solo agregar (sin UPDATE ni DELETE)" '[[ "$(PGq "SELECT count(*) FROM information_schema.role_table_grants WHERE table_name='"'"'auditoria'"'"' AND grantee='"'"'${DB_USER:-app_taller}'"'"' AND privilege_type IN ('"'"'UPDATE'"'"','"'"'DELETE'"'"')")" == "0" ]]'
 chk "los hashes de contraseña son argon2id" '[[ "$(PGq "SELECT count(*) FROM usuario WHERE password_hash NOT LIKE '"'"'\$argon2id\$%'"'"'")" == "0" ]]'
+chk "el rol de la aplicación no puede borrar pagos (RN-10: solo se anulan)" \
+  '[[ "$(PGq "SELECT count(*) FROM information_schema.role_table_grants WHERE table_name='"'"'pago'"'"' AND grantee='"'"'${DB_USER:-app_taller}'"'"' AND privilege_type='"'"'DELETE'"'"'")" == "0" ]]'
 chk "la base usa la zona horaria del taller (${SGIT_TZ:-America/Mexico_City})" '[[ "$(PGq "SHOW timezone")" == "${SGIT_TZ:-America/Mexico_City}" ]]'
 chk "la seguridad por fila (RLS) está activa en partida" '[[ "$(PGq "SELECT relrowsecurity FROM pg_class WHERE relname='"'"'partida'"'"'")" == "t" ]]'
 

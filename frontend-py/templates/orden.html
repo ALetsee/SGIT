@@ -7,6 +7,7 @@
 {% set cerrada = ot.estado in ('TERMINADA','ENTREGADO') %}
 {% set hv_abierto = checklist and checklist.circuito_hv_off and checklist.service_plug_out and checklist.epp_certificado and checklist.firmado_en %}
 {% set recepcion_o_jefe = rol in ('RECEPCION','JEFE_TALLER','ADMIN') %}
+{% set partidas_autorizadas = (cot.partidas or []) | selectattr('autorizada') | list | length > 0 %}
 {% set ruta = url_for('orden', ot_id=ot.id) %}
 
 <section class="panel">
@@ -306,9 +307,30 @@
     <h3>Cobranza y entrega</h3>
     <p style="font-size:20px;margin:0 0 8px">Saldo pendiente: <strong>{{ ot.saldo|money }}</strong></p>
     {% if pagos %}
-    <div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Método</th><th class="num">Monto</th></tr></thead><tbody>
-      {% for p in pagos %}<tr><td>{{ p.creado_en|fecha }}</td><td>{{ p.tipo|capitalize }}</td><td>{{ p.metodo|capitalize }}</td><td class="num">{{ p.monto|money }}</td></tr>{% endfor %}
+    <div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Método</th><th class="num">Monto</th><th></th>{% if rol == 'ADMIN' %}<th></th>{% endif %}</tr></thead><tbody>
+      {% for p in pagos %}<tr{{ ' class="anulado"'|safe if p.anulado_en }}>
+        <td>{{ p.creado_en|fecha }}</td><td>{{ p.tipo|capitalize }}</td><td>{{ p.metodo|capitalize }}</td><td class="num">{{ p.monto|money }}</td>
+        <td>{% if p.anulado_en %}<span class="hint">Anulado el {{ p.anulado_en|fecha }} por {{ p.anulado_por }}: {{ p.motivo_anulacion }}</span>{% endif %}</td>
+        {% if rol == 'ADMIN' %}<td>{% if not p.anulado_en %}
+        <form class="inline" method="post" action="{{ url_for('pago_anular', pid=p.id) }}" data-confirm="¿Anular este pago? El saldo de la orden se restituye.">
+          <input type="hidden" name="csrf" value="{{ csrf() }}"><input type="hidden" name="volver" value="{{ request.path }}">
+          <input name="motivo" placeholder="Motivo de la anulación" required style="width:160px">
+          <button class="btn alt small">Anular</button>
+        </form>{% endif %}</td>{% endif %}
+      </tr>{% endfor %}
     </tbody></table></div>
+    {% endif %}
+    {% if ot.estado != 'ENTREGADO' and not ot.sin_cargo_motivo and rol in ('JEFE_TALLER','ADMIN') and not partidas_autorizadas %}
+    <details style="margin:10px 0"><summary>Esta orden no tiene ningún trabajo autorizado con costo. Autorizar entrega sin cargo (garantía, cortesía)</summary>
+      <form method="post" action="{{ url_for('orden_accion', ot_id=ot.id, nombre='sin_cargo') }}" style="margin-top:8px">
+        <input type="hidden" name="csrf" value="{{ csrf() }}">
+        <label for="sc_motivo">Motivo (obligatorio)</label>
+        <textarea id="sc_motivo" name="motivo" rows="2" required placeholder="Por ejemplo: garantía de fábrica, trabajo de cortesía por reclamo anterior..."></textarea>
+        <div class="actions"><button class="btn alt">Autorizar entrega sin cargo</button></div>
+      </form>
+    </details>
+    {% elif ot.sin_cargo_motivo %}
+    <p class="hint">Entrega sin cargo autorizada por el jefe de taller: «{{ ot.sin_cargo_motivo }}».</p>
     {% endif %}
     {% if ot.estado != 'ENTREGADO' %}
     <form method="post" action="{{ url_for('orden_accion', ot_id=ot.id, nombre='pago') }}">

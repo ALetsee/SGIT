@@ -23,7 +23,7 @@
     <a href="{{ url_for('estado') }}" {% if ep=='estado' %}aria-current="page"{% endif %}>Resumen</a>
     <a href="{{ url_for('ordenes') }}" {% if ep.startswith('orden') %}aria-current="page"{% endif %}>Órdenes</a>
     <a href="{{ url_for('tablero') }}" {% if ep=='tablero' %}aria-current="page"{% endif %}>Tablero</a>
-    <a href="{{ url_for('clientes') }}" {% if ep in ('clientes','vehiculo') %}aria-current="page"{% endif %}>Clientes y vehículos</a>
+    {% if puede('RECEPCION','JEFE_TALLER','ADMIN') %}<a href="{{ url_for('clientes') }}" {% if ep in ('clientes','vehiculo') %}aria-current="page"{% endif %}>Clientes y vehículos</a>{% endif %}
     <a href="{{ url_for('inventario') }}" {% if ep=='inventario' %}aria-current="page"{% endif %}>Inventario</a>
     <a href="{{ url_for('herramientas') }}" {% if ep=='herramientas' %}aria-current="page"{% endif %}>Herramientas</a>
     {% if puede('JEFE_TALLER','ADMIN') %}

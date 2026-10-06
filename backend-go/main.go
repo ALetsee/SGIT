@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -15,7 +16,7 @@ import (
 	_ "github.com/lib/pq"
 )
 
-const version = "1.1.2"
+const version = "1.2.0"
 
 type Config struct {
 	DBURL     string
@@ -24,6 +25,7 @@ type Config struct {
 	Listen    string
 	FotosDir  string
 	FotosMin  int
+	FotosMax  int
 }
 
 type App struct {
@@ -32,6 +34,7 @@ type App struct {
 	mux       *Router
 	lim       *limiter
 	dummyHash string
+	sem       chan struct{}
 }
 
 func env(k, def string) string {
@@ -63,6 +66,7 @@ func loadConfig() Config {
 		Listen:    env("LISTEN_ADDR", "127.0.0.1:8081"),
 		FotosDir:  env("FOTOS_DIR", "/var/lib/sgit/fotos"),
 		FotosMin:  envInt("FOTOS_MINIMAS", 4),
+		FotosMax:  envInt("FOTOS_MAXIMAS", 40),
 	}
 }
 
@@ -103,6 +107,11 @@ func secureHeaders(next http.Handler) http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Content-Security-Policy", "default-src 'none'")
+		// PostgreSQL no admite el carácter nulo en texto: se rechaza antes de llegar a la base
+		if strings.Contains(r.URL.RawQuery, "%00") || strings.Contains(r.URL.RawPath, "%00") || strings.ContainsRune(r.URL.Path, 0) {
+			writeJSON(w, 400, map[string]any{"statusCode": 400, "error": "La dirección contiene caracteres no permitidos."})
+			return
+		}
 		next.ServeHTTP(w, r)
 	})
 }
@@ -122,7 +131,14 @@ func main() {
 	if err := os.MkdirAll(cfg.FotosDir, 0o750); err != nil {
 		log.Fatalf("no se pudo crear %s: %v", cfg.FotosDir, err)
 	}
-	a := &App{db: openDB(cfg), cfg: cfg, mux: &Router{}, lim: newLimiter()}
+	turnos := runtime.NumCPU() // argon2id usa 64 MB: se deja pasar un número pequeño de verificaciones a la vez
+	if turnos < 2 {
+		turnos = 2
+	}
+	if turnos > 4 {
+		turnos = 4
+	}
+	a := &App{db: openDB(cfg), cfg: cfg, mux: &Router{}, lim: newLimiter(), sem: make(chan struct{}, turnos)}
 	var err error
 	if a.dummyHash, err = hashPassword("contraseña-ficticia-para-igualar-tiempos"); err != nil {
 		log.Fatal(err)
@@ -184,7 +200,7 @@ func (a *App) routes() {
 
 	// Clientes y vehículos
 	R("POST /clientes", a.crearCliente, RolRecep, RolJefe, RolAdmin)
-	R("GET /clientes", a.listarClientes)
+	R("GET /clientes", a.listarClientes, RolRecep, RolJefe, RolAdmin) // datos personales: no para técnicos
 	R("POST /vehiculos", a.crearVehiculo, RolRecep, RolJefe, RolAdmin)
 	R("GET /vehiculos", a.listarVehiculos)
 	R("GET /vehiculos/{id}/historial", a.historialVehiculo)
@@ -212,6 +228,8 @@ func (a *App) routes() {
 	R("POST /ordenes-trabajo/{id}/autorizar-todas", a.autorizarTodas, RolRecep, RolJefe, RolAdmin)
 	R("PATCH /partidas/{id}/autorizacion", a.autorizarPartida, RolRecep, RolJefe, RolAdmin)
 	R("PATCH /partidas/{id}", a.editarPartida, RolAdmin)
+	R("POST /ordenes-trabajo/{id}/sin-cargo", a.autorizarSinCargo, RolJefe, RolAdmin)
+	R("POST /pagos/{id}/anular", a.anularPago, RolAdmin)
 
 	// Inventario
 	R("GET /refacciones", a.listarRefacciones)

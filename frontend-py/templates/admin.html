@@ -9,6 +9,13 @@
       <input type="hidden" name="csrf" value="{{ csrf() }}">
       <label for="margen">Margen de ganancia %</label><input id="margen" name="margen_pct" value="{{ cfg.margen_pct }}" inputmode="decimal" required>
       <label for="iva">Impuesto (IVA) %</label><input id="iva" name="impuesto_pct" value="{{ cfg.impuesto_pct }}" inputmode="decimal" required>
+      <label for="anticipo">Anticipo máximo sin cotización ($)</label>
+      <input id="anticipo" name="anticipo_maximo" value="{{ cfg.anticipo_maximo or 5000 }}" inputmode="decimal" required>
+      <p class="hint" style="margin:2px 0 10px">Tope para un anticipo registrado antes de tener partidas cotizadas.</p>
+      <label style="display:flex;align-items:center;gap:8px;font-weight:normal">
+        <input type="checkbox" name="tecnico_solo_asignadas" {{ 'checked' if cfg.tecnico_solo_asignadas != '0' }}>
+        Un técnico solo puede trabajar las órdenes que tiene asignadas
+      </label>
       <div class="actions"><button class="btn">Guardar</button></div>
     </form>
   </section>

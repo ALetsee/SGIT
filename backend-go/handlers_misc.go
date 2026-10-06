@@ -210,6 +210,9 @@ func (a *App) crearPedido(w http.ResponseWriter, r *http.Request, u *User) {
 		if st := str(ot, "estado"); st == "TERMINADA" || st == "ENTREGADO" {
 			return httpErr(409, "La orden está %s; no admite pedidos de refacciones.", st)
 		}
+		if e = a.exigirAsignado(r.Context(), tx, u, id); e != nil {
+			return e
+		}
 		out, e = oneRow(r.Context(), tx,
 			`INSERT INTO pedido_proveedor(refaccion_id,ot_id,proveedor,numero_guia,eta) VALUES ($1,$2,$3,$4,$5)
 			 RETURNING id,proveedor,numero_guia,eta,creado_en`, ref, id, prov, guia, eta)
@@ -385,8 +388,10 @@ func (a *App) verConfiguracion(w http.ResponseWriter, r *http.Request, u *User) 
 
 func (a *App) guardarConfiguracion(w http.ResponseWriter, r *http.Request, u *User) {
 	var in struct {
-		MargenPct   json.Number `json:"margen_pct"`
-		ImpuestoPct json.Number `json:"impuesto_pct"`
+		MargenPct            json.Number  `json:"margen_pct"`
+		ImpuestoPct          json.Number  `json:"impuesto_pct"`
+		TecnicoSoloAsignadas *bool        `json:"tecnico_solo_asignadas"`
+		AnticipoMaximo       *json.Number `json:"anticipo_maximo"`
 	}
 	if err := decode(r, &in); err != nil {
 		fail(w, err)
@@ -402,6 +407,11 @@ func (a *App) guardarConfiguracion(w http.ResponseWriter, r *http.Request, u *Us
 		fail(w, err)
 		return
 	}
+	antic, err := numStrPtr(in.AnticipoMaximo, "anticipo_maximo", 0, 100000000)
+	if err != nil {
+		fail(w, err)
+		return
+	}
 	err = a.withTx(r.Context(), u, func(tx *sql.Tx) error {
 		if _, e := tx.ExecContext(r.Context(), `UPDATE configuracion SET valor=$1 WHERE clave='margen_pct'`, marg); e != nil {
 			return e
@@ -409,11 +419,28 @@ func (a *App) guardarConfiguracion(w http.ResponseWriter, r *http.Request, u *Us
 		if _, e := tx.ExecContext(r.Context(), `UPDATE configuracion SET valor=$1 WHERE clave='impuesto_pct'`, imp); e != nil {
 			return e
 		}
-		return audit(r.Context(), tx, u, "CAMBIA_CONFIGURACION", "configuracion", "", map[string]any{"margen_pct": marg, "impuesto_pct": imp})
+		datos := map[string]any{"margen_pct": marg, "impuesto_pct": imp}
+		if in.TecnicoSoloAsignadas != nil {
+			v := "0"
+			if *in.TecnicoSoloAsignadas {
+				v = "1"
+			}
+			if _, e := tx.ExecContext(r.Context(), `UPDATE configuracion SET valor=$1 WHERE clave='tecnico_solo_asignadas'`, v); e != nil {
+				return e
+			}
+			datos["tecnico_solo_asignadas"] = v
+		}
+		if antic != nil {
+			if _, e := tx.ExecContext(r.Context(), `UPDATE configuracion SET valor=$1 WHERE clave='anticipo_maximo'`, antic); e != nil {
+				return e
+			}
+			datos["anticipo_maximo"] = antic
+		}
+		return audit(r.Context(), tx, u, "CAMBIA_CONFIGURACION", "configuracion", "", datos)
 	})
 	if err != nil {
 		fail(w, err)
 		return
 	}
-	writeJSON(w, 200, map[string]any{"margen_pct": marg, "impuesto_pct": imp})
+	a.verConfiguracion(w, r, u)
 }

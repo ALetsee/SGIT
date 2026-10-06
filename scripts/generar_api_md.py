@@ -21,6 +21,7 @@ DESC = {
  'verCotizacion': 'Ver la cotización (el costo y el margen solo los ven jefe y administrador)', 'crearPartida': 'Agregar una partida manual (RF-16)',
  'autorizarTodas': 'Autorizar todo el presupuesto (RF-17, RF-18)', 'autorizarPartida': 'Autorizar o rechazar una partida (RF-17, RF-18, RN-05)',
  'editarPartida': 'Cambiar el precio de una partida (RF-40, RN-04, auditado; vuelve a pedir autorización)', 'listarRefacciones': 'Catálogo y existencias (RF-22, RF-27)',
+ 'autorizarSinCargo': 'Autorizar la entrega sin cobrar nada, con motivo (RN-09); solo jefe de taller o administrador', 'anularPago': 'Anular un pago (RN-10, con motivo; nunca se edita ni se borra); restituye el saldo; solo administrador',
  'crearRefaccion': 'Alta de refacción', 'editarRefaccion': 'Cambiar mínimo, costo o márgenes', 'entradaRefaccion': 'Entrada de inventario',
  'consumirRefaccion': 'Tomar una pieza y cargarla a la orden, atómico (RF-23, RN-03, RN-06)', 'listarConsumos': 'Piezas consumidas por la orden',
  'crearPago': 'Registrar anticipo, pago parcial o final (RF-30)', 'listarPagos': 'Pagos de la orden', 'crearGarantia': 'Registrar una garantía (RF-29)',

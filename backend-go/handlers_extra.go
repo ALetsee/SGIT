@@ -146,7 +146,7 @@ func (a *App) cambiarPassword(w http.ResponseWriter, r *http.Request, u *User) {
 		return
 	}
 	clave := "p:" + u.ID
-	if a.lim.count(clave) >= 5 {
+	if !a.lim.reservar([]limite{{clave, 5}}) {
 		w.Header().Set("Retry-After", "600")
 		fail(w, httpErr(429, "Demasiados intentos fallidos. Espera 10 minutos e inténtalo de nuevo."))
 		return
@@ -156,8 +156,14 @@ func (a *App) cambiarPassword(w http.ResponseWriter, r *http.Request, u *User) {
 		fail(w, err)
 		return
 	}
-	if !verifyPassword(in.Actual, str(row, "password_hash")) {
-		a.lim.add(clave)
+	ok, ocupado := a.verificar(in.Actual, str(row, "password_hash"))
+	if ocupado {
+		a.lim.devolver(clave)
+		w.Header().Set("Retry-After", "5")
+		fail(w, httpErr(503, "El servidor está ocupado. Inténtalo de nuevo en unos segundos."))
+		return
+	}
+	if !ok {
 		_ = audit(r.Context(), a.db, u, "CAMBIO_PASSWORD_FALLIDO", "usuario", u.ID, nil)
 		fail(w, httpErr(400, "La contraseña actual no es correcta."))
 		return
@@ -185,7 +191,7 @@ func (a *App) cambiarPassword(w http.ResponseWriter, r *http.Request, u *User) {
 		fail(w, err)
 		return
 	}
-	a.lim.reset(clave)
+	a.lim.olvidar(clave)
 	writeJSON(w, 200, map[string]any{"ok": true, "access_token": a.signJWT(u.ID)})
 }
 
@@ -283,4 +289,25 @@ func (a *App) estadoTaller(w http.ResponseWriter, r *http.Request, u *User) {
 		out["por_cobrar"] = res["por_cobrar"]
 	}
 	writeJSON(w, 200, out)
+}
+
+// exigirAsignado: un técnico solo trabaja las órdenes que tiene asignadas (configurable por el administrador:
+// «tecnico_solo_asignadas»). Jefe, administrador y recepción no se ven afectados.
+func (a *App) exigirAsignado(ctx context.Context, q queryer, u *User, otID string) error {
+	if u.Rol != RolTec {
+		return nil
+	}
+	if v, err := a.config(ctx, q, "tecnico_solo_asignadas"); err == nil && v == "0" {
+		return nil
+	}
+	row, err := oneRow(ctx, q, `SELECT COALESCE(tecnico_id::text, '') AS t FROM orden_trabajo WHERE id = $1`, otID)
+	if err != nil {
+		return err
+	}
+	// Mientras la orden no tenga técnico asignado, la puede trabajar cualquiera (primero en llegar);
+	// una vez asignada a alguien, solo esa persona (y jefe/administrador, que no pasan por aquí) la toca.
+	if t := str(row, "t"); t != "" && t != u.ID {
+		return httpErr(403, "Esta orden está asignada a otro técnico. Pídele al jefe de taller que te la reasigne.")
+	}
+	return nil
 }

@@ -241,15 +241,25 @@ func (a *App) crearVehiculo(w http.ResponseWriter, r *http.Request, u *User) {
 
 func (a *App) listarVehiculos(w http.ResponseWriter, r *http.Request, u *User) {
 	q := "%" + strings.TrimSpace(r.URL.Query().Get("q")) + "%"
+	filtro := "v.vin ILIKE $1 OR v.placas ILIKE $1 OR c.nombre ILIKE $1"
+	if u.Rol == RolTec {
+		filtro = "v.vin ILIKE $1 OR v.placas ILIKE $1" // el técnico no busca ni ve a qué cliente pertenece
+	}
 	rows, err := rowsToMaps(r.Context(), a.db,
 		`SELECT v.id,v.cliente_id,c.nombre AS cliente_nombre,v.vin,v.placas,v.marca,v.modelo,v.anio,v.tipo,
 		        v.transmision,v.kilometraje_actual,v.creado_en
 		   FROM vehiculo v JOIN cliente c ON c.id=v.cliente_id
-		  WHERE v.vin ILIKE $1 OR v.placas ILIKE $1 OR c.nombre ILIKE $1
+		  WHERE `+filtro+`
 		  ORDER BY v.creado_en DESC LIMIT 500`, q)
 	if err != nil {
 		fail(w, err)
 		return
+	}
+	if u.Rol == RolTec {
+		for _, m := range rows {
+			delete(m, "cliente_nombre")
+			delete(m, "cliente_id")
+		}
 	}
 	writeJSON(w, 200, rows)
 }
@@ -267,6 +277,9 @@ func (a *App) historialVehiculo(w http.ResponseWriter, r *http.Request, u *User)
 	if err != nil {
 		fail(w, err)
 		return
+	}
+	if u.Rol == RolTec {
+		delete(veh, "cliente_nombre")
 	}
 	ots, err := rowsToMaps(r.Context(), a.db,
 		`SELECT ot.id, ot.folio, ot.estado, ot.falla_reportada, ot.km_ingreso, ot.creado_en, ot.entregado_en,

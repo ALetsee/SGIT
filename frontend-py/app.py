@@ -13,9 +13,12 @@ from functools import wraps
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
+import base64
 import requests
+from cryptography.fernet import Fernet, InvalidToken
 from flask import (Flask, Response, abort, flash, redirect, render_template,
                    request, send_from_directory, session, url_for)
+from flask.sessions import SecureCookieSessionInterface
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 API = os.environ.get("SGIT_API", "http://127.0.0.1:8081").rstrip("/")
@@ -24,6 +27,34 @@ TZ = ZoneInfo(os.environ.get("SGIT_TZ", "America/Mexico_City"))
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 app.secret_key = os.environ.get("FLASK_SECRET") or secrets.token_hex(32)  # sin FLASK_SECRET las sesiones no sobreviven reinicios
+
+
+class _SerializadorCifrado:
+    """Envuelve al serializador de sesion de Flask para CIFRAR su contenido (no solo firmarlo).
+    La cookie de sesion contiene el token de la API; sin esto viaja legible (base64, no cifrado)."""
+
+    def __init__(self, interno, fernet):
+        self._interno, self._fernet = interno, fernet
+
+    def dumps(self, obj):
+        return self._fernet.encrypt(self._interno.dumps(obj).encode("utf-8")).decode("ascii")
+
+    def loads(self, s):
+        if isinstance(s, (bytes, bytearray)):
+            s = s.decode("ascii")
+        return self._interno.loads(self._fernet.decrypt(s.encode("ascii"), ttl=None).decode("utf-8"))
+
+
+class _InterfazSesionCifrada(SecureCookieSessionInterface):
+    def __init__(self, fernet):
+        super().__init__()
+        # se envuelve UNA sola vez (get_signing_serializer se invoca en cada peticion; envolver ahi
+        # apilaria capas de cifrado una sobre otra y rompia la sesion tras la primera peticion)
+        self.serializer = _SerializadorCifrado(self.serializer, fernet)
+
+
+# La llave de cifrado se deriva de FLASK_SECRET (nunca viaja al navegador; vive solo en este proceso).
+app.session_interface = _InterfazSesionCifrada(Fernet(base64.urlsafe_b64encode(hashlib.sha256(app.secret_key.encode()).digest())))
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
@@ -183,10 +214,21 @@ def cabeceras(resp):
     return resp
 
 
+def _ruta_propia(destino):
+    """Solo rutas de ESTA aplicacion: una barra, sin esquema, sin host y sin ningun caracter de control
+    (tab, salto de linea, retorno, barra invertida...) que un navegador pudiera interpretar como un
+    cambio de host. Cualquier otra cosa se descarta."""
+    if not destino or destino[0] != "/" or len(destino) > 2048:
+        return False
+    if any(c in destino for c in ("\\", "\t", "\n", "\r", "\x0b", "\x0c")) or destino.lstrip("/").startswith(("/", "\\")):
+        return False
+    p = urlparse(destino)
+    return not p.netloc and not p.scheme
+
+
 def volver(default="ordenes"):
     destino = request.form.get("volver", "")
-    p = urlparse(destino)
-    if destino.startswith("/") and not destino.startswith("//") and not p.netloc:
+    if _ruta_propia(destino):
         return redirect(destino)
     ref = urlparse(request.referrer or "")
     if ref.netloc == request.host and ref.path.startswith("/"):  # misma página desde la que se envió el formulario
@@ -258,7 +300,7 @@ def login():
         session.permanent = True
         session["token"], session["user"] = r["access_token"], r["usuario"]
         destino = request.args.get("next", "")
-        if destino.startswith("/") and not destino.startswith("//"):
+        if _ruta_propia(destino):
             return redirect(destino)
         return redirect(url_for("estado" if r["usuario"]["rol"] in ("JEFE_TALLER", "ADMIN") else "ordenes"))
     return render_template("login.html")
@@ -468,6 +510,7 @@ ACCIONES = {
     "horas": ("POST", "/ordenes-trabajo/{id}/horas", _horas, "Horas registradas."),
     "partida": ("POST", "/ordenes-trabajo/{id}/partidas", _partida, "Partida agregada a la cotización."),
     "autorizar_todas": ("POST", "/ordenes-trabajo/{id}/autorizar-todas", lambda f: {"medio": f.get("medio", "")}, "Presupuesto autorizado."),
+    "sin_cargo": ("POST", "/ordenes-trabajo/{id}/sin-cargo", lambda f: {"motivo": f.get("motivo", "")}, "Entrega sin cargo autorizada."),
     "consumo": ("POST", "/ordenes-trabajo/{id}/consumos", lambda f: {
         "refaccion_id": f.get("refaccion_id", ""), "cantidad": num(f.get("cantidad", ""), "cantidad")}, "Pieza cargada a la orden."),
     "pago": ("POST", "/ordenes-trabajo/{id}/pagos", lambda f: {
@@ -527,6 +570,14 @@ def partida_precio(pid):
     return volver()
 
 
+@app.route("/pagos/<pid>/anular", methods=["POST"])
+@requiere("ADMIN")
+def pago_anular(pid):
+    api("POST", f"/pagos/{pid}/anular", json={"motivo": request.form.get("motivo", "")})
+    flash("Pago anulado.", "ok")
+    return volver()
+
+
 @app.route("/pedidos/<pid>/recibido", methods=["POST"])
 @requiere("JEFE_TALLER", "ADMIN")
 def pedido_recibido(pid):
@@ -551,7 +602,7 @@ def foto(fid):
 
 # ---------------------------------------------------------------- clientes y vehiculos
 @app.route("/clientes")
-@requiere()
+@requiere("RECEPCION", "JEFE_TALLER", "ADMIN")  # datos personales de clientes: el tecnico no los necesita
 def clientes():
     q = request.args.get("q", "")
     return render_template("clientes.html", clientes=api("GET", "/clientes", params={"q": q}),
@@ -692,7 +743,11 @@ def admin():
 @app.route("/admin/configuracion", methods=["POST"])
 @requiere("ADMIN")
 def admin_config():
-    api("PUT", "/configuracion", json={"margen_pct": num(request.form.get("margen_pct", ""), "margen"),
-                                       "impuesto_pct": num(request.form.get("impuesto_pct", ""), "impuesto")})
-    flash("Margen e impuesto actualizados. Aplican a partidas nuevas.", "ok")
+    api("PUT", "/configuracion", json={
+        "margen_pct": num(request.form.get("margen_pct", ""), "margen"),
+        "impuesto_pct": num(request.form.get("impuesto_pct", ""), "impuesto"),
+        "tecnico_solo_asignadas": "tecnico_solo_asignadas" in request.form,
+        "anticipo_maximo": num(request.form.get("anticipo_maximo", ""), "anticipo máximo"),
+    })
+    flash("Configuración actualizada: margen, impuesto y demás ajustes guardados.", "ok")
     return redirect(url_for("admin"))

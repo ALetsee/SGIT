@@ -96,13 +96,14 @@ for nombre, ses, rutas in [
     ("administrador", adm, ["/estado", "/ordenes", "/tablero", "/cuenta", "/clientes", "/inventario", "/herramientas", "/equipo", "/reportes", "/admin"]),
     ("jefe", jefe, ["/estado", "/ordenes", "/tablero", "/cuenta", "/clientes", "/inventario", "/herramientas", "/equipo", "/reportes"]),
     ("recepción", rec, ["/estado", "/ordenes", "/tablero", "/cuenta", "/clientes", "/inventario", "/herramientas"]),
-    ("técnico", tec, ["/estado", "/ordenes", "/tablero", "/cuenta", "/clientes", "/inventario", "/herramientas"]),
+    ("técnico", tec, ["/estado", "/ordenes", "/tablero", "/cuenta", "/inventario", "/herramientas"]),
 ]:
     for ruta in rutas:
         anota(ses.c.get(ruta).status_code == 200, f"{nombre} abre {ruta}")
 anota(rec.c.get("/reportes").status_code == 403, "recepción NO abre reportes")
 anota(rec.c.get("/admin").status_code == 403, "recepción NO abre administración")
 anota(tec.c.get("/equipo").status_code == 403, "técnico NO abre el equipo")
+anota(tec.c.get("/clientes").status_code == 403, "técnico NO abre clientes (datos personales)")
 anota(jefe.c.get("/admin").status_code == 403, "jefe NO abre administración")
 
 print("== Recepción: cliente, vehículo y orden ==")
@@ -199,9 +200,9 @@ anota(len(kpis) >= 2 and kpis[0] >= 1206.40 and kpis[1] >= 406.40,
       "el reporte suma facturación (>= 1,206.40) y utilidad neta (>= 406.40, ingreso menos costo)", str(kpis))
 r = adm.get("/admin")
 anota("FIRMA_CHECKLIST_HV" in html(r) and "CONSUMO_REFACCION" in html(r), "la auditoría muestra la firma HV y el consumo")
-r = adm.post("/admin/configuracion", {"margen_pct": "30", "impuesto_pct": "16"})
-anota("actualizados" in html(r), "el administrador guarda margen e impuesto")
-r = jefe.post("/admin/configuracion", {"margen_pct": "99", "impuesto_pct": "16"})
+r = adm.post("/admin/configuracion", {"margen_pct": "30", "impuesto_pct": "16", "anticipo_maximo": "5000", "tecnico_solo_asignadas": "on"})
+anota("actualizada" in html(r), "el administrador guarda margen e impuesto")
+r = jefe.post("/admin/configuracion", {"margen_pct": "99", "impuesto_pct": "16", "anticipo_maximo": "5000"})
 anota(r.status_code == 403, "el jefe NO cambia márgenes")
 
 print("== Hoja de entrada, tablero y resumen (RF-07, RF-10, RF-42) ==")

@@ -15,7 +15,7 @@ SALIDA=$(PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER
 DO $$
 DECLARE
   v_cli uuid; v_veh uuid; v_vev uuid; v_ot uuid; v_ot2 uuid; v_ref uuid; v_part uuid;
-  v_tec_ok uuid; v_tec_no uuid; v_n numeric; v_t timestamptz; v_i integer;
+  v_tec_ok uuid; v_tec_no uuid; v_n numeric; v_t timestamptz; v_i integer; v_ot3 uuid; v_ot4 uuid; v_pg uuid;
 BEGIN
   PERFORM set_config('app.rol','JEFE_TALLER', true);
 
@@ -76,6 +76,9 @@ BEGIN
   EXCEPTION WHEN OTHERS THEN
     RAISE NOTICE '% 09 RN-02 exige estado TERMINADA', CASE WHEN SQLERRM LIKE 'RN-02%' THEN 'OK   ' ELSE 'FALLO' END;
   END;
+  UPDATE orden_trabajo SET estado='DIAGNOSTICO' WHERE id = v_ot;
+  UPDATE orden_trabajo SET estado='REPARACION' WHERE id = v_ot;
+  UPDATE orden_trabajo SET estado='PRUEBAS_RUTA' WHERE id = v_ot;
   UPDATE orden_trabajo SET estado='TERMINADA' WHERE id = v_ot;
   BEGIN
     UPDATE orden_trabajo SET estado='ENTREGADO' WHERE id = v_ot;
@@ -116,6 +119,7 @@ BEGIN
     RAISE NOTICE '% 15 RN-01 rechaza firma de tecnico no certificado', CASE WHEN SQLERRM LIKE 'RN-01%' THEN 'OK   ' ELSE 'FALLO' END;
   END;
   UPDATE checklist_hv SET tecnico_hv_id = v_tec_ok WHERE ot_id = v_ot2;
+  UPDATE orden_trabajo SET estado='DIAGNOSTICO' WHERE id = v_ot2;
   UPDATE orden_trabajo SET estado='REPARACION' WHERE id = v_ot2;
   RAISE NOTICE 'OK    16 RN-01 permite EV con checklist firmado por tecnico certificado';
 
@@ -166,6 +170,81 @@ BEGIN
     RAISE NOTICE 'FALLO 25 acepto un nivel de combustible de 150 %%';
   EXCEPTION WHEN OTHERS THEN
     RAISE NOTICE 'OK    25 RF-01 rechaza porcentajes fuera de 0 a 100';
+  END;
+
+  -- RN-07: flujo valido de estados
+  INSERT INTO orden_trabajo(vehiculo_id) VALUES (v_veh) RETURNING id INTO v_ot3;
+  BEGIN
+    UPDATE orden_trabajo SET estado='REPARACION' WHERE id = v_ot3;
+    RAISE NOTICE 'FALLO 26 salto de RECEPCION a REPARACION';
+  EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE '% 26 RN-07 no permite saltar etapas (de RECEPCION a REPARACION)', CASE WHEN SQLERRM LIKE 'RN-07%' THEN 'OK   ' ELSE 'FALLO' END;
+  END;
+  BEGIN
+    UPDATE orden_trabajo SET estado='REPARACION' WHERE id = v_ot;
+    RAISE NOTICE 'FALLO 27 se reabrio una orden entregada';
+  EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE '% 27 RN-07 una orden entregada no se reabre', CASE WHEN SQLERRM LIKE 'RN-07%' THEN 'OK   ' ELSE 'FALLO' END;
+  END;
+  -- RN-08: una orden entregada es historia cerrada
+  BEGIN
+    UPDATE partida SET autorizada = false, medio_autorizacion = NULL, autorizado_en = NULL WHERE id = v_part;
+    RAISE NOTICE 'FALLO 28 cambio una partida de una orden entregada';
+  EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE '% 28 RN-08 las partidas de una orden entregada no cambian', CASE WHEN SQLERRM LIKE 'RN-08%' THEN 'OK   ' ELSE 'FALLO' END;
+  END;
+  BEGIN
+    INSERT INTO pago(ot_id,monto,metodo,tipo) VALUES (v_ot,1,'EFECTIVO','ANTICIPO');
+    RAISE NOTICE 'FALLO 29 acepto un pago en una orden entregada';
+  EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE '% 29 RN-08 no se registran pagos en una orden entregada', CASE WHEN SQLERRM LIKE 'RN-08%' THEN 'OK   ' ELSE 'FALLO' END;
+  END;
+  -- RN-09: no se entrega sin cobrar nada, salvo entrega sin cargo autorizada con motivo
+  UPDATE orden_trabajo SET estado='DIAGNOSTICO' WHERE id = v_ot3;
+  UPDATE orden_trabajo SET estado='REPARACION' WHERE id = v_ot3;
+  UPDATE orden_trabajo SET estado='PRUEBAS_RUTA' WHERE id = v_ot3;
+  UPDATE orden_trabajo SET estado='TERMINADA' WHERE id = v_ot3;
+  BEGIN
+    UPDATE orden_trabajo SET estado='ENTREGADO' WHERE id = v_ot3;
+    RAISE NOTICE 'FALLO 30 entrego sin ningun trabajo autorizado';
+  EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE '% 30 RN-09 no entrega sin trabajo autorizado', CASE WHEN SQLERRM LIKE 'RN-09%' THEN 'OK   ' ELSE 'FALLO' END;
+  END;
+  UPDATE orden_trabajo SET sin_cargo_motivo = 'Garantia de fabrica', sin_cargo_en = now() WHERE id = v_ot3;
+  UPDATE orden_trabajo SET estado='ENTREGADO' WHERE id = v_ot3;
+  SELECT entregado_en INTO v_t FROM orden_trabajo WHERE id = v_ot3;
+  RAISE NOTICE '% 31 RN-09 permite la entrega sin cargo cuando el jefe da el motivo', CASE WHEN v_t IS NOT NULL THEN 'OK   ' ELSE 'FALLO' END;
+  -- RN-10: pagos
+  INSERT INTO orden_trabajo(vehiculo_id) VALUES (v_veh) RETURNING id INTO v_ot4;
+  v_part := fn_consumir_refaccion(v_ot4, v_ref, 1, NULL);
+  PERFORM fn_autorizar_partida(v_part, true, 'FIRMA', NULL);
+  BEGIN
+    INSERT INTO pago(ot_id,monto,metodo,tipo) VALUES (v_ot4,999,'EFECTIVO','FINAL');
+    RAISE NOTICE 'FALLO 32 acepto un pago mayor al saldo';
+  EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE '% 32 RN-10 rechaza un pago mayor al saldo', CASE WHEN SQLERRM LIKE 'RN-10%' THEN 'OK   ' ELSE 'FALLO' END;
+  END;
+  BEGIN
+    INSERT INTO pago(ot_id,monto,metodo,tipo) VALUES (v_ot4,5000,'EFECTIVO','ANTICIPO');
+    RAISE NOTICE 'FALLO 33 acepto un anticipo mayor a lo cotizado';
+  EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE '% 33 RN-10 rechaza un anticipo mayor a lo cotizado', CASE WHEN SQLERRM LIKE 'RN-10%' THEN 'OK   ' ELSE 'FALLO' END;
+  END;
+  INSERT INTO pago(ot_id,monto,metodo,tipo) VALUES (v_ot4,100,'EFECTIVO','ANTICIPO') RETURNING id INTO v_pg;
+  UPDATE pago SET anulado_en = now(), motivo_anulacion = 'Se capturo por error' WHERE id = v_pg;
+  SELECT saldo INTO v_n FROM orden_trabajo WHERE id = v_ot4;
+  RAISE NOTICE '% 34 RN-10 al anular un pago el saldo se restituye (150.80): %', CASE WHEN v_n=150.80 THEN 'OK   ' ELSE 'FALLO' END, v_n;
+  BEGIN
+    UPDATE pago SET monto = 1 WHERE id = v_pg;
+    RAISE NOTICE 'FALLO 35 se pudo editar un pago';
+  EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE '% 35 RN-10 un pago no se edita', CASE WHEN SQLERRM LIKE 'RN-10%' THEN 'OK   ' ELSE 'FALLO' END;
+  END;
+  BEGIN
+    DELETE FROM pago WHERE id = v_pg;
+    RAISE NOTICE 'FALLO 36 se pudo borrar un pago';
+  EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'OK    36 RN-10 un pago no se borra';
   END;
 
   RAISE EXCEPTION 'FIN_PRUEBA: todo se revirtio';

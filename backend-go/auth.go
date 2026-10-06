@@ -191,30 +191,77 @@ func newLimiter() *limiter { return &limiter{fails: map[string][]time.Time{}} }
 
 const ventana = 10 * time.Minute
 
-func (l *limiter) count(key string) int {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	cutoff := time.Now().Add(-ventana)
-	kept := l.fails[key][:0]
-	for _, t := range l.fails[key] {
-		if t.After(cutoff) {
+type limite struct {
+	clave string
+	max   int
+}
+
+// podar descarta los intentos fuera de la ventana y devuelve los vigentes (debe llamarse con el cerrojo tomado).
+func (l *limiter) podar(clave string, desde time.Time) []time.Time {
+	kept := l.fails[clave][:0]
+	for _, t := range l.fails[clave] {
+		if t.After(desde) {
 			kept = append(kept, t)
 		}
 	}
-	l.fails[key] = kept
-	return len(kept)
+	if len(kept) == 0 {
+		delete(l.fails, clave)
+		return nil
+	}
+	l.fails[clave] = kept
+	return kept
 }
 
-func (l *limiter) add(key string) {
+// reservar comprueba y registra un intento de forma ATÓMICA: si 20 peticiones llegan a la vez, solo
+// pasan las que caben en el límite. (Antes se contaba al terminar y las peticiones en paralelo lo evadían.)
+func (l *limiter) reservar(ls []limite) bool {
 	l.mu.Lock()
-	l.fails[key] = append(l.fails[key], time.Now())
+	defer l.mu.Unlock()
+	ahora := time.Now()
+	desde := ahora.Add(-ventana)
+	if len(l.fails) > 20000 { // el mapa no crece sin límite
+		for k := range l.fails {
+			l.podar(k, desde)
+		}
+	}
+	for _, x := range ls {
+		if len(l.podar(x.clave, desde)) >= x.max {
+			return false
+		}
+	}
+	for _, x := range ls {
+		l.fails[x.clave] = append(l.fails[x.clave], ahora)
+	}
+	return true
+}
+
+// devolver quita el último intento de una clave (se usa cuando el intento fue exitoso o no se llegó a evaluar).
+func (l *limiter) devolver(clave string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if s := l.fails[clave]; len(s) > 1 {
+		l.fails[clave] = s[:len(s)-1]
+	} else {
+		delete(l.fails, clave)
+	}
+}
+
+func (l *limiter) olvidar(clave string) {
+	l.mu.Lock()
+	delete(l.fails, clave)
 	l.mu.Unlock()
 }
 
-func (l *limiter) reset(key string) {
-	l.mu.Lock()
-	delete(l.fails, key)
-	l.mu.Unlock()
+// verificar comprueba una contraseña con argon2id (64 MB por intento) dejando pasar pocas a la vez, para que
+// una ráfaga de inicios de sesión no agote la memoria ni la CPU. Si no hay turno en 3 s, responde «ocupado».
+func (a *App) verificar(pw, hash string) (ok bool, ocupado bool) {
+	select {
+	case a.sem <- struct{}{}:
+		defer func() { <-a.sem }()
+		return verifyPassword(pw, hash), false
+	case <-time.After(3 * time.Second):
+		return false, true
+	}
 }
 
 // clientIP confía en X-Real-IP solo cuando la petición llega desde el propio servidor
@@ -237,19 +284,24 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) {
 		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
-	if err := decode(r, &in); err != nil {
+	if err := decodeLimit(r, &in, 4096); err != nil { // un inicio de sesión legítimo pesa unos cientos de bytes
 		fail(w, err)
 		return
 	}
 	email := strings.ToLower(strings.TrimSpace(in.Email))
+	if email == "" || len(email) > 254 || in.Password == "" || len(in.Password) > 1024 {
+		fail(w, httpErr(400, "El correo o la contraseña no tienen un formato válido."))
+		return
+	}
 	ip := clientIP(r)
-	kEmail, kIP := "e:"+email, "i:"+ip
-	if a.lim.count(kEmail) >= 5 || a.lim.count(kIP) >= 30 {
+	// Por correo+IP (5): quien falla desde su equipo no bloquea al dueño de la cuenta que entra desde otro.
+	// Por correo (30) y por IP (30): frenan los ataques repartidos entre muchas direcciones o correos.
+	kEI, kE, kI := "ei:"+email+"|"+ip, "e:"+email, "i:"+ip
+	if !a.lim.reservar([]limite{{kEI, 5}, {kE, 30}, {kI, 30}}) {
 		w.Header().Set("Retry-After", "600")
 		fail(w, httpErr(429, "Demasiados intentos fallidos. Espera 10 minutos e inténtalo de nuevo."))
 		return
 	}
-
 	row, err := oneRow(r.Context(), a.db,
 		`SELECT id, nombre, email, rol::text AS rol, COALESCE(especialidad::text,'') AS especialidad, activo, password_hash
 		   FROM usuario WHERE lower(email) = $1`, email)
@@ -258,15 +310,23 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) {
 	if found {
 		hash = str(row, "password_hash")
 	}
-	ok := verifyPassword(in.Password, hash) // se verifica siempre para igualar tiempos
+	ok, ocupado := a.verificar(in.Password, hash) // se verifica siempre para igualar tiempos
+	if ocupado {
+		a.lim.devolver(kEI)
+		a.lim.devolver(kE)
+		a.lim.devolver(kI)
+		w.Header().Set("Retry-After", "5")
+		fail(w, httpErr(503, "El servidor está ocupado. Inténtalo de nuevo en unos segundos."))
+		return
+	}
 	if !found || !ok || row["activo"] != true {
-		a.lim.add(kEmail)
-		a.lim.add(kIP)
 		_ = audit(r.Context(), a.db, nil, "LOGIN_FALLIDO", "usuario", "", map[string]any{"email": email, "ip": ip})
 		fail(w, httpErr(401, "Credenciales inválidas."))
 		return
 	}
-	a.lim.reset(kEmail)
+	a.lim.olvidar(kEI)
+	a.lim.devolver(kE)
+	a.lim.devolver(kI)
 	u := User{ID: str(row, "id"), Nombre: str(row, "nombre"), Email: str(row, "email"),
 		Rol: str(row, "rol"), Especialidad: str(row, "especialidad")}
 	_ = audit(r.Context(), a.db, &u, "LOGIN", "usuario", u.ID, map[string]any{"ip": ip})

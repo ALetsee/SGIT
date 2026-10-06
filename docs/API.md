@@ -26,7 +26,7 @@ En la columna *Roles*, «todos» significa cualquier usuario autenticado.
 | GET | `/usuarios` | Administrador, Jefe de taller | Lista de usuarios |
 | PATCH | `/usuarios/{id}` | Administrador | Activar o desactivar un usuario |
 | POST | `/clientes` | Recepción, Jefe de taller, Administrador | Alta de cliente (RF-01) |
-| GET | `/clientes` | todos | Buscar clientes (?q=) |
+| GET | `/clientes` | Recepción, Jefe de taller, Administrador | Buscar clientes (?q=) |
 | POST | `/vehiculos` | Recepción, Jefe de taller, Administrador | Alta de vehículo (RF-01, RF-02) |
 | GET | `/vehiculos` | todos | Buscar por placas, VIN o cliente (?q=) |
 | GET | `/vehiculos/{id}/historial` | todos | Historial del vehículo (RF-28) |
@@ -50,6 +50,8 @@ En la columna *Roles*, «todos» significa cualquier usuario autenticado.
 | POST | `/ordenes-trabajo/{id}/autorizar-todas` | Recepción, Jefe de taller, Administrador | Autorizar todo el presupuesto (RF-17, RF-18) |
 | PATCH | `/partidas/{id}/autorizacion` | Recepción, Jefe de taller, Administrador | Autorizar o rechazar una partida (RF-17, RF-18, RN-05) |
 | PATCH | `/partidas/{id}` | Administrador | Cambiar el precio de una partida (RF-40, RN-04, auditado; vuelve a pedir autorización) |
+| POST | `/ordenes-trabajo/{id}/sin-cargo` | Jefe de taller, Administrador | Autorizar la entrega sin cobrar nada, con motivo (RN-09); solo jefe de taller o administrador |
+| POST | `/pagos/{id}/anular` | Administrador | Anular un pago (RN-10, con motivo; nunca se edita ni se borra); restituye el saldo; solo administrador |
 | GET | `/refacciones` | todos | Catálogo y existencias (RF-22, RF-27) |
 | POST | `/refacciones` | Jefe de taller, Administrador | Alta de refacción |
 | PATCH | `/refacciones/{id}` | Administrador | Cambiar mínimo, costo o márgenes |

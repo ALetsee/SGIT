@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"math"
 	"net/http"
@@ -88,6 +90,8 @@ func mapPG(pe *pq.Error) (int, string) {
 		return 400, "Falta un dato obligatorio (" + pe.Column + ")."
 	case "22P02", "22003", "22007", "22008":
 		return 400, "Valor inválido en la solicitud."
+	case "22021", "22P05":
+		return 400, "El texto contiene caracteres no permitidos."
 	case "42501":
 		return 403, "Permiso insuficiente."
 	}
@@ -112,10 +116,20 @@ func pathID(r *http.Request, name string) (string, error) {
 	return strings.ToLower(id), nil
 }
 
-func decode(r *http.Request, dst any) error {
-	r.Body = http.MaxBytesReader(nil, r.Body, 1<<20)
-	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields() // equivalente a forbidNonWhitelisted
+func decode(r *http.Request, dst any) error { return decodeLimit(r, dst, 1<<20) }
+
+// decodeLimit lee el cuerpo con un tope de tamaño, rechaza el carácter nulo (PostgreSQL no lo admite
+// en texto) y los campos desconocidos (equivalente a forbidNonWhitelisted).
+func decodeLimit(r *http.Request, dst any, max int64) error {
+	body, err := io.ReadAll(http.MaxBytesReader(nil, r.Body, max))
+	if err != nil {
+		return httpErr(400, "El cuerpo de la petición es inválido o demasiado grande.")
+	}
+	if bytes.IndexByte(body, 0) >= 0 || bytes.Contains(bytes.ToLower(body), []byte(`\u0000`)) {
+		return httpErr(400, "El texto contiene caracteres no permitidos.")
+	}
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.DisallowUnknownFields()
 	if err := dec.Decode(dst); err != nil {
 		return httpErr(400, "JSON inválido: %v", err)
 	}

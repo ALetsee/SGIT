@@ -15,7 +15,7 @@ import (
 
 const otSelect = `
 SELECT ot.id, ot.folio, ot.estado, ot.falla_reportada, ot.km_ingreso, ot.prometido_en, ot.motivo_retraso,
-       ot.saldo, ot.creado_en, ot.actualizado_en, ot.entregado_en, ot.nivel_combustible_pct, ot.carga_bateria_pct,
+       ot.saldo, ot.creado_en, ot.actualizado_en, ot.entregado_en, ot.nivel_combustible_pct, ot.carga_bateria_pct, ot.sin_cargo_motivo, ot.sin_cargo_en,
        ot.vehiculo_id, v.marca, v.modelo, v.anio, v.placas, v.vin, v.tipo,
        c.id AS cliente_id, c.nombre AS cliente_nombre, c.telefono AS cliente_telefono,
        ot.tecnico_id, t.nombre AS tecnico_nombre
@@ -29,6 +29,7 @@ func ocultarEconomia(u *User, rows ...map[string]any) {
 	if u.Rol == RolTec {
 		for _, m := range rows {
 			delete(m, "saldo")
+			delete(m, "cliente_telefono") // datos personales: el técnico no los necesita
 		}
 	}
 }
@@ -251,6 +252,9 @@ func (a *App) cambiarEstado(w http.ResponseWriter, r *http.Request, u *User) {
 	err = a.withTx(r.Context(), u, func(tx *sql.Tx) error {
 		cur, e := oneRow(r.Context(), tx, `SELECT estado::text AS estado FROM orden_trabajo WHERE id=$1 FOR UPDATE`, id)
 		if e != nil {
+			return e
+		}
+		if e = a.exigirAsignado(r.Context(), tx, u, id); e != nil {
 			return e
 		}
 		prev := str(cur, "estado")
@@ -489,6 +493,13 @@ func (a *App) subirFoto(w http.ResponseWriter, r *http.Request, u *User) {
 		fail(w, err)
 		return
 	}
+	if n, err := oneRow(r.Context(), a.db, `SELECT count(*) AS n FROM fotografia WHERE ot_id=$1`, id); err != nil {
+		fail(w, err)
+		return
+	} else if have, _ := n["n"].(int64); int(have) >= a.cfg.FotosMax { // cuota por orden: evita llenar el disco
+		fail(w, httpErr(409, "Esta orden ya tiene el máximo de %d fotografías.", a.cfg.FotosMax))
+		return
+	}
 	fid := newUUID()
 	dir := filepath.Join(a.cfg.FotosDir, id)
 	if err := os.MkdirAll(dir, 0o750); err != nil {
@@ -574,6 +585,10 @@ func (a *App) registrarHoras(w http.ResponseWriter, r *http.Request, u *User) {
 			return
 		}
 		tec = in.TecnicoID
+	}
+	if err := a.exigirAsignado(r.Context(), a.db, u, id); err != nil {
+		fail(w, err)
+		return
 	}
 	row, err := oneRow(r.Context(), a.db,
 		`INSERT INTO registro_horas(ot_id,tecnico_id,horas,nota) VALUES ($1,$2,$3::numeric,$4)

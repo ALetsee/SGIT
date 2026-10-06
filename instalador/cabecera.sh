@@ -91,7 +91,7 @@ ok "Proyecto extraido"
 paso "1/9 Paquetes del sistema"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq || fail "No se pudo ejecutar apt-get update. Revisa la conexion a Internet."
-BASE=(postgresql golang-go python3 python3-flask python3-requests gunicorn openssl curl ca-certificates cron iproute2 logrotate)
+BASE=(postgresql golang-go python3 python3-flask python3-requests python3-cryptography gunicorn openssl curl ca-certificates cron iproute2 logrotate)
 [[ $SIN_NGINX -eq 1 ]] || BASE+=(nginx)
 apt-get install -y -qq "${BASE[@]}" || fail "No se pudieron instalar los paquetes base."
 USAR_MODULOS=0
@@ -174,6 +174,13 @@ ZONA="$(grep -E '^SGIT_TZ=' "$ENV_FILE" | head -1 | cut -d= -f2)"; ZONA="${ZONA:
 set_env SGIT_TZ "$ZONA"; set_env TZ "$ZONA"
 chown root:sgit "$ENV_FILE"; chmod 640 "$ENV_FILE"
 set -a; . "$ENV_FILE"; set +a
+
+# El proceso WEB (Flask) nunca debe ver DB_PASSWORD ni JWT_SECRET: no los necesita, y si alguien
+# tomara el control de ese proceso, esas dos variables le darian la base de datos y la capacidad de
+# forjar sesiones de cualquier usuario. Se le da un archivo de entorno aparte, con solo lo suyo.
+ENV_FILE_WEB="$CONF_DIR/sgit-web.env"
+grep -E '^(SGIT_API|SGIT_TZ|FLASK_SECRET|SGIT_COOKIE_SECURE|SGIT_HSTS|TZ)=' "$ENV_FILE" > "$ENV_FILE_WEB"
+chown root:sgit "$ENV_FILE_WEB"; chmod 640 "$ENV_FILE_WEB"
 
 # Rol de la aplicacion: sin privilegios de administrador
 pgsu -v pw="$DB_PASSWORD" -v rol="$DB_USER" <<'SQL'
@@ -319,7 +326,7 @@ Wants=sgit-api.service
 [Service]
 User=sgit
 Group=sgit
-EnvironmentFile=$ENV_FILE
+EnvironmentFile=$ENV_FILE_WEB
 WorkingDirectory=$DEST/frontend
 ExecStart=$GUNICORN --workers 2 --threads 2 --bind \${WEB_BIND} --access-logfile - app:app
 Restart=always
@@ -343,8 +350,11 @@ else
   warn "Esto no sobrevive a un reinicio; en un servidor normal se usan los servicios systemd."
   pkill -x sgit-api 2>/dev/null || true; pkill -x gunicorn 2>/dev/null || true; sleep 1
   touch /var/log/sgit-api.log /var/log/sgit-web.log; chown sgit:sgit /var/log/sgit-api.log /var/log/sgit-web.log
+  mapfile -t ENVV_WEB < <(grep -E '^(SGIT_API|SGIT_TZ|FLASK_SECRET|SGIT_COOKIE_SECURE|SGIT_HSTS|TZ)=' "$ENV_FILE")
   setsid runuser -u sgit -- env "${ENVV[@]}" "$DEST/bin/sgit-api" >>/var/log/sgit-api.log 2>&1 < /dev/null &
-  setsid runuser -u sgit -- env "${ENVV[@]}" "$GUNICORN" --workers 2 --threads 2 --bind "$WEB_BIND" --chdir "$DEST/frontend" app:app >>/var/log/sgit-web.log 2>&1 < /dev/null &
+  # env -i: este script ya trae DB_PASSWORD y JWT_SECRET exportados en su propio entorno (los necesita
+  # para la API y para pgsu); sin "-i" el proceso web los heredaria igual aunque no esten en ENVV_WEB.
+  setsid runuser -u sgit -- env -i PATH="$PATH" HOME=/home/sgit "${ENVV_WEB[@]}" "$GUNICORN" --workers 2 --threads 2 --bind "$WEB_BIND" --chdir "$DEST/frontend" app:app >>/var/log/sgit-web.log 2>&1 < /dev/null &
 fi
 esperar() { for _ in $(seq 1 40); do curl -fsS "$1" >/dev/null 2>&1 && return 0; sleep 1; done; return 1; }
 esperar "http://127.0.0.1:8081/salud" || fail "La API no respondio. Revisa: journalctl -u sgit-api -n 50 (o /var/log/sgit-api.log)"
@@ -399,6 +409,8 @@ server {
     ssl_certificate $CERT;
     ssl_certificate_key $CLAVE;
     ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;
+    ssl_prefer_server_ciphers on;
     client_max_body_size 12m;
     server_tokens off;
     gzip on;
