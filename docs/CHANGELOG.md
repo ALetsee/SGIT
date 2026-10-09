@@ -1,5 +1,34 @@
 # Registro de cambios
 
+## 1.2.0
+Correcciones de una prueba de seguridad ofensiva interna (autoevaluación del equipo de desarrollo; no sustituye una validación independiente).
+
+**Lógica de negocio (nuevas reglas RN-07 a RN-10, como disparadores de la base)**
+- RN-07: flujo de estados válido (ya no se salta de Recepción a Reparación); una orden entregada no se reabre.
+- RN-08: una orden entregada es historia cerrada — sus partidas, autorizaciones y pagos ya no cambian.
+- RN-09: no se entrega un vehículo sin ningún trabajo autorizado con costo, salvo que el jefe de taller autorice la entrega sin cargo con un motivo.
+- RN-10: un pago no puede exceder el saldo ni un anticipo exceder el límite configurado; los pagos no se editan ni se borran, solo se anulan (con motivo, solo el administrador), y el saldo se restituye.
+
+**Autenticación y sesión**
+- El límite de 5 intentos de contraseña por correo+IP ahora es atómico: ya no se evadía enviando los intentos en paralelo.
+- Un semáforo limita cuántas verificaciones de contraseña (argon2id) corren a la vez, para que una ráfaga de inicios de sesión no agote la memoria ni la CPU del servidor.
+- Se cerró una redirección abierta en el inicio de sesión (`?next=`).
+- La cookie de sesión ahora va cifrada (antes solo firmada).
+
+**Separación de privilegios y de secretos**
+- Un técnico ya no puede cambiar el estado de una orden asignada a otro técnico (configurable: «tecnico_solo_asignadas»); una orden sin asignar la sigue pudiendo tomar cualquiera.
+- El técnico ya no puede listar o ver el teléfono y correo de los clientes.
+- El proceso web (Flask) ya no recibe la contraseña de la base de datos ni el secreto de los tokens JWT: tiene su propio archivo de entorno con solo lo que necesita.
+
+**Otros**
+- TLS 1.2 ya no acepta el intercambio de llaves RSA ni cifrado CBC (solo suites con secreto perfecto hacia adelante).
+- Cuota de 40 fotografías por orden.
+- El texto con un carácter nulo (`\u0000`) se rechaza de forma controlada en vez de causar un error 500.
+- Se probó, con peticiones reales, resistencia a inyección SQL (24 combinaciones en los 4 buscadores) y a XSS almacenado (6 campos, 11 pantallas): sin hallazgos.
+- La cotización muestra la cantidad con la unidad de su concepto («3 h», «2 pzas», «1 trab.») en vez de «horas o piezas».
+
+**Esquema:** versión 4 → 5 (`005_v5.sql`). **Pruebas automáticas:** 360 → 415.
+
 ## 1.1.2
 - Cotización: la cantidad se muestra y se pide con la unidad de su concepto (horas de mano de obra, piezas, trabajos, servicios) en el formulario, la tabla, el historial de versiones y la orden de salida; antes decía «horas o piezas».
 
