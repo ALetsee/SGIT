@@ -1,9 +1,5 @@
 #!/usr/bin/env bash
-# Prueba de recuperacion ante desastre (RNF-07): restaura la base A UN MOMENTO EXACTO usando la copia
-# base cifrada y el archivo de WAL, en un clúster temporal aparte (no toca la base real).
-#   1) crea una base temporal con datos "antes"        2) hace el respaldo (copia base cifrada)
-#   3) agrega un dato, marca la hora T, agrega "despues"   4) restaura la copia base + WAL hasta T
-#   5) comprueba que estan los datos hasta T y que NO esta lo posterior
+
 set -uo pipefail
 [[ $EUID -eq 0 ]] || { echo "Ejecuta con sudo." >&2; exit 1; }
 ENV_FILE="${SGIT_ENV:-/etc/sgit/sgit.env}"; set -a; . "$ENV_FILE"; set +a
@@ -39,7 +35,7 @@ echo "      punto de recuperacion elegido: $PUNTO"
 mkdir -p "$RD"
 openssl enc -d -aes-256-cbc -pbkdf2 -pass "file:$KEY" -in "$BASE" | gunzip | tar -x -C "$RD" && ok "copia base descifrada y extraida" || { mal "no se pudo extraer la copia base"; exit 1; }
 chown -R postgres:postgres "$RD"; chmod 700 "$RD"
-# Configuracion propia del clúster temporal: NO hereda el archivado ni los puertos del clúster real
+
 : > "$RD/postgresql.conf"; echo "local all all trust" > "$RD/pg_hba.conf"; : > "$RD/pg_ident.conf"
 cat > "$RD/postgresql.auto.conf" <<CONF
 restore_command = 'cp $WAL_DIR/%f %p'

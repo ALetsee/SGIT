@@ -1,11 +1,10 @@
-#!/usr/bin/env python3
 """Carga datos de demostracion en el SGIT (personal, clientes, inventario y ordenes en distintos estados).
 
 Uso (en el servidor, despues de instalar):
     python3 cargar_demo.py
 Pide el correo y la contrasena del administrador. Habla con la API local (127.0.0.1:8081).
 
-Deja escenarios listos para mostrar cada regla de negocio en vivo (ver GUION_DEMO.md).
+Deja escenarios listos para mostrar cada regla de negocio en vivo.
 Los datos son ficticios. Los usuarios de demostracion comparten una contrasena generada al azar
 que se imprime una sola vez y se guarda en demo_credenciales.txt (permisos 600).
 Si lo corres dos veces, la segunda se detiene sin duplicar nada.
@@ -154,13 +153,10 @@ def main():
         rec("POST", f"/ordenes-trabajo/{ot}/pagos", json={"monto": monto, "metodo": metodo, "tipo": tipo})
 
     print("4/6 Ordenes de trabajo (se leen las fotografias minimas configuradas)...")
-    # Para saber cuantas fotos exige el sistema: se consulta con una orden recien creada.
     ot_a = orden("leaf", "Alarma de falla de aislamiento eléctrico", 15200, 3,
                  ("Rayón en puerta delantera izquierda; golpe leve en defensa trasera.", "Cable de carga portátil y llanta de refacción."))
     minimas = adm("GET", f"/ordenes-trabajo/{ot_a}/inspeccion")["minimas"]
-    # OT-A queda recien llegada, SIN fotografias: se ven las fotos y el diagnostico en vivo.
 
-    # OT-B: PHEV/HEV en diagnostico con tecnico HV, SIN checklist -> demuestra el bloqueo RN-01
     ot_b = orden("crv", "Pérdida de potencia al acelerar y aviso de sistema híbrido", 41200, -1,
                  ("Sin daños visibles.", "Tapetes y cargador de teléfono."))
     fotos(ot_b)
@@ -168,7 +164,6 @@ def main():
     estado(thv, ot_b, "DIAGNOSTICO")
     thv("POST", f"/ordenes-trabajo/{ot_b}/horas", json={"horas": 1.5, "nota": "Lectura de códigos y revisión del paquete de batería"})
 
-    # OT-C: combustion en reparacion con cotizacion parcialmente autorizada
     ot_c = orden("ranger", "Pérdida de potencia en subidas", 63400, 2, ("Faro derecho estrellado.", "Herramienta de obra en la caja."))
     fotos(ot_c)
     jefe("PATCH", f"/ordenes-trabajo/{ot_c}/asignar-tecnico", json={"tecnico_id": ids["tecnico.mec"]})
@@ -182,10 +177,9 @@ def main():
     jefe("POST", f"/ordenes-trabajo/{ot_c}/partidas", json={"concepto": "TRABAJO_EXTERNO", "descripcion": "Rectificación de culata (taller externo)",
                                                             "cantidad": 1, "costo": 1800})
     parte = jefe("GET", f"/ordenes-trabajo/{ot_c}/cotizacion")["partidas"]
-    for p in parte[:3]:  # el cliente autoriza las primeras partidas; el trabajo externo queda pendiente
+    for p in parte[:3]:
         rec("PATCH", f"/partidas/{p['id']}/autorizacion", json={"autorizada": True, "medio": "WHATSAPP"})
 
-    # OT-D: combustion TERMINADA con saldo pendiente -> demuestra RN-02 y luego se cobra y se entrega
     ot_d = orden("jetta", "Servicio mayor y ruido al frenar", 88100, 1, ("Rayones leves en cajuela.", "Llanta de refacción y gato."))
     fotos(ot_d)
     jefe("PATCH", f"/ordenes-trabajo/{ot_d}/asignar-tecnico", json={"tecnico_id": ids["tecnico.mec"]})
@@ -201,7 +195,6 @@ def main():
     estado(tmec, ot_d, "PRUEBAS_RUTA")
     estado(tmec, ot_d, "TERMINADA")
 
-    # OT-E: combustion entregada con retraso (motivo: refaccion) -> alimenta reportes
     ot_e = orden("np300", "Falla de arranque en frío", 120500, -5, ("Sin daños visibles.", "Ninguna."))
     fotos(ot_e)
     jefe("PATCH", f"/ordenes-trabajo/{ot_e}/asignar-tecnico", json={"tecnico_id": ids["tecnico.mec"]})
@@ -223,7 +216,6 @@ def main():
     estado(rec, ot_e, "ENTREGADO")
     jefe("PATCH", f"/ordenes-trabajo/{ot_e}/retraso", json={"motivo": "REFACCION"})
 
-    # OT-F: EV entregada a tiempo con checklist HV -> reportes de electricos
     ot_f = orden("dolphin", "Alarma de falla de aislamiento eléctrico", 9800, 2, ("Sin daños visibles.", "Cable de carga."))
     fotos(ot_f)
     jefe("PATCH", f"/ordenes-trabajo/{ot_f}/asignar-tecnico", json={"tecnico_id": ids["tecnico.hv"]})

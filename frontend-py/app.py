@@ -26,7 +26,7 @@ TZ = ZoneInfo(os.environ.get("SGIT_TZ", "America/Mexico_City"))
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
-app.secret_key = os.environ.get("FLASK_SECRET") or secrets.token_hex(32)  # sin FLASK_SECRET las sesiones no sobreviven reinicios
+app.secret_key = os.environ.get("FLASK_SECRET") or secrets.token_hex(32)
 
 
 class _SerializadorCifrado:
@@ -48,12 +48,9 @@ class _SerializadorCifrado:
 class _InterfazSesionCifrada(SecureCookieSessionInterface):
     def __init__(self, fernet):
         super().__init__()
-        # se envuelve UNA sola vez (get_signing_serializer se invoca en cada peticion; envolver ahi
-        # apilaria capas de cifrado una sobre otra y rompia la sesion tras la primera peticion)
         self.serializer = _SerializadorCifrado(self.serializer, fernet)
 
 
-# La llave de cifrado se deriva de FLASK_SECRET (nunca viaja al navegador; vive solo en este proceso).
 app.session_interface = _InterfazSesionCifrada(Fernet(base64.urlsafe_b64encode(hashlib.sha256(app.secret_key.encode()).digest())))
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
@@ -61,7 +58,7 @@ app.config.update(
     SESSION_COOKIE_SECURE=os.environ.get("SGIT_COOKIE_SECURE") == "1",
     PERMANENT_SESSION_LIFETIME=datetime.timedelta(hours=8),
     MAX_CONTENT_LENGTH=10 * 1024 * 1024,
-    SEND_FILE_MAX_AGE_DEFAULT=datetime.timedelta(days=7),   # estaticos versionados: redes lentas descargan una sola vez
+    SEND_FILE_MAX_AGE_DEFAULT=datetime.timedelta(days=7),
 )
 
 
@@ -77,8 +74,6 @@ def _version_estaticos():
 
 ASSET_V = _version_estaticos()
 
-# Cada concepto de la cotizacion se mide en algo distinto: horas, piezas o trabajos.
-# (etiqueta de la cantidad, etiqueta del costo, abreviatura que se muestra junto a la cantidad)
 UNIDAD = {
     "MANO_OBRA": ("Horas de mano de obra", "Costo por hora (sin margen ni IVA)", "h"),
     "REFACCION_NUEVA": ("Piezas", "Costo por pieza (sin margen ni IVA)", "pzas"),
@@ -97,7 +92,6 @@ def cant_u(concepto, cantidad):
         return "—"
     return f"{txt} {UNIDAD.get(concepto, ('', '', ''))[2]}".strip()
 
-# ---------------------------------------------------------------- catalogos
 ESTADOS = ["RECEPCION", "DIAGNOSTICO", "ESPERA_REFACCION", "REPARACION", "PRUEBAS_RUTA", "TERMINADA", "ENTREGADO"]
 LBL = {"RECEPCION": "Recepción", "DIAGNOSTICO": "Diagnóstico", "ESPERA_REFACCION": "Espera de refacción",
        "REPARACION": "Reparación", "PRUEBAS_RUTA": "Pruebas de ruta", "TERMINADA": "Terminada", "ENTREGADO": "Entregado"}
@@ -118,7 +112,6 @@ class ApiError(Exception):
         self.status, self.msg = status, msg
 
 
-# ---------------------------------------------------------------- cliente API
 def api(method, path, json=None, params=None, files=None, raw=False):
     headers = {"X-Real-IP": request.remote_addr or ""}
     if session.get("token"):
@@ -163,7 +156,6 @@ def opcional(f, *claves):
     return {k: f[k].strip() for k in claves if f.get(k, "").strip()}
 
 
-# ---------------------------------------------------------------- sesion y seguridad
 def usuario():
     return session.get("user") or {}
 
@@ -205,7 +197,7 @@ def cabeceras(resp):
     resp.headers["X-Frame-Options"] = "DENY"
     resp.headers["Referrer-Policy"] = "same-origin"
     resp.headers["Permissions-Policy"] = "camera=(self), microphone=(), geolocation=(), payment=()"
-    if os.environ.get("SGIT_HSTS") == "1":   # solo con certificado valido (un autofirmado quedaria bloqueado)
+    if os.environ.get("SGIT_HSTS") == "1":
         resp.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     resp.headers["Content-Security-Policy"] = ("default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
                                                "script-src 'self'; frame-ancestors 'none'; form-action 'self'")
@@ -231,7 +223,7 @@ def volver(default="ordenes"):
     if _ruta_propia(destino):
         return redirect(destino)
     ref = urlparse(request.referrer or "")
-    if ref.netloc == request.host and ref.path.startswith("/"):  # misma página desde la que se envió el formulario
+    if ref.netloc == request.host and ref.path.startswith("/"):
         return redirect(ref.path)
     return redirect(url_for(default))
 
@@ -258,7 +250,6 @@ def error_http(e):
     return render_template("error.html", status=e.code, msg=texto), e.code
 
 
-# ---------------------------------------------------------------- filtros y globales
 @app.template_filter("money")
 def f_money(v):
     try:
@@ -291,7 +282,6 @@ app.jinja_env.globals.update(UNIDAD=UNIDAD, cant_u=cant_u, asset_v=ASSET_V, csrf
                              ESPEC=ESPEC, CONCEPTOS=CONCEPTOS, MEDIOS=MEDIOS, TIPOS_MOTOR=TIPOS_MOTOR, RETRASOS=RETRASOS)
 
 
-# ---------------------------------------------------------------- acceso
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
@@ -310,7 +300,7 @@ def login():
 def logout():
     if session.get("token"):
         try:
-            api("POST", "/auth/logout", json={})   # revoca el token tambien en el servidor
+            api("POST", "/auth/logout", json={})
         except ApiError:
             pass
     session.clear()
@@ -328,7 +318,6 @@ def salud():
     return {"estado": "ok"}
 
 
-# ---------------------------------------------------------------- resumen, tablero, hoja de entrada (RF-42, RF-10, RF-07)
 @app.route("/estado")
 @requiere()
 def estado():
@@ -380,7 +369,6 @@ def orden_entrada(ot_id):
                            insp=api("GET", f"/ordenes-trabajo/{ot_id}/inspeccion"))
 
 
-# ---------------------------------------------------------------- mi cuenta y contrasenas (ASVS)
 @app.route("/cuenta")
 @requiere()
 def cuenta():
@@ -394,7 +382,7 @@ def cuenta_password():
     if f.get("nueva", "") != f.get("confirmar", ""):
         raise ApiError(400, "La confirmación no coincide con la contraseña nueva.")
     r = api("POST", "/auth/cambiar-password", json={"password_actual": f.get("actual", ""), "password_nueva": f.get("nueva", "")})
-    session["token"] = r["access_token"]   # las demas sesiones de esta persona quedaron invalidadas
+    session["token"] = r["access_token"]
     flash("Contraseña actualizada. Las demás sesiones abiertas se cerraron.", "ok")
     return redirect(url_for("cuenta"))
 
@@ -407,7 +395,6 @@ def equipo_password(uid):
     return redirect(url_for("equipo"))
 
 
-# ---------------------------------------------------------------- PWA (RNF-02)
 @app.route("/sw.js")
 def service_worker():
     resp = send_from_directory(app.static_folder, "sw.js", mimetype="application/javascript")
@@ -421,7 +408,6 @@ def offline():
     return render_template("offline.html")
 
 
-# ---------------------------------------------------------------- ordenes
 @app.route("/ordenes")
 @requiere()
 def ordenes():
@@ -432,7 +418,7 @@ def ordenes():
         limite = max(1, min(int(request.args.get("limite", 100)), 500))
     except ValueError:
         limite = 100
-    params["limite"] = limite   # redes lentas: se piden 100 y se ofrece "mostrar mas"
+    params["limite"] = limite
     lista = api("GET", "/ordenes-trabajo", params=params)
     vehiculos = api("GET", "/vehiculos") if puede("RECEPCION", "JEFE_TALLER", "ADMIN") else []
     return render_template("ordenes.html", ordenes=lista, vehiculos=vehiculos, filtro=request.args,
@@ -447,7 +433,7 @@ def orden_nueva():
     if f.get("km_ingreso", "").strip():
         cuerpo["km_ingreso"] = int(num(f["km_ingreso"], "kilometraje"))
     for k, nombre in (("nivel_combustible_pct", "nivel de combustible"), ("carga_bateria_pct", "carga de la bateria")):
-        if f.get(k, "").strip():   # RF-01: la API exige el que corresponde al tipo de motor
+        if f.get(k, "").strip():
             cuerpo[k] = int(num(f[k], nombre))
     ot = api("POST", "/ordenes-trabajo", json=cuerpo)
     flash(f"Orden {ot['folio']} creada. Registra la inspección y las fotografías.", "ok")
@@ -471,7 +457,7 @@ def orden(ot_id):
     ctx["pagos"] = api("GET", f"/ordenes-trabajo/{ot_id}/pagos") if rol in ("RECEPCION", "JEFE_TALLER", "ADMIN") else []
     ctx["refacciones"] = api("GET", "/refacciones") if rol in ("TECNICO", "JEFE_TALLER", "ADMIN") else []
     ctx["tecnicos"] = ([u for u in api("GET", "/usuarios") if u["rol"] == "TECNICO" and u["activo"]]) if priv else []
-    ctx["versiones"] = (soft("GET", f"/ordenes-trabajo/{ot_id}/cotizacion/versiones") or []) if priv else []   # RF-21
+    ctx["versiones"] = (soft("GET", f"/ordenes-trabajo/{ot_id}/cotizacion/versiones") or []) if priv else []
     return render_template("orden.html", **ctx)
 
 
@@ -497,7 +483,6 @@ def _garantia(f):
     return c
 
 
-# nombre de accion -> (metodo, ruta, constructor del cuerpo, mensaje)
 ACCIONES = {
     "estado": ("PATCH", "/ordenes-trabajo/{id}/estado", lambda f: {"estado": f.get("estado", "")}, "Estado actualizado."),
     "asignar": ("PATCH", "/ordenes-trabajo/{id}/asignar-tecnico", lambda f: {"tecnico_id": f.get("tecnico_id", "")}, "Técnico asignado."),
@@ -600,9 +585,8 @@ def foto(fid):
                     headers={"Cache-Control": "private, max-age=3600"})
 
 
-# ---------------------------------------------------------------- clientes y vehiculos
 @app.route("/clientes")
-@requiere("RECEPCION", "JEFE_TALLER", "ADMIN")  # datos personales de clientes: el tecnico no los necesita
+@requiere("RECEPCION", "JEFE_TALLER", "ADMIN")
 def clientes():
     q = request.args.get("q", "")
     return render_template("clientes.html", clientes=api("GET", "/clientes", params={"q": q}),
@@ -637,7 +621,6 @@ def vehiculo(vid):
     return render_template("vehiculo.html", h=api("GET", f"/vehiculos/{vid}/historial"))
 
 
-# ---------------------------------------------------------------- inventario y herramientas
 @app.route("/inventario")
 @requiere()
 def inventario():
@@ -702,7 +685,6 @@ def herramienta_devolucion(hid):
     return redirect(url_for("herramientas"))
 
 
-# ---------------------------------------------------------------- equipo, reportes, administracion
 @app.route("/equipo")
 @requiere("JEFE_TALLER", "ADMIN")
 def equipo():

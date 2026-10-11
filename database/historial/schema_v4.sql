@@ -1,11 +1,7 @@
--- =============================================================================
--- SGIT - Esquema HISTORICO version 4 (solo referencia para probar migraciones; no se instala)
--- Se aplica sobre una base NUEVA. Requiere que exista el rol 'app_taller'
--- (lo crea el instalador). Basado en ERS-EMS-2026-001, secciones 8, 9 y 10.
--- =============================================================================
+
+
 BEGIN;
 
--- ---------- Tipos enumerados ----------
 CREATE TYPE tipo_motor           AS ENUM ('COMBUSTION','EV','PHEV','HEV');
 CREATE TYPE tipo_transmision     AS ENUM ('MANUAL','AUTOMATICA','CVT');
 CREATE TYPE estado_ot            AS ENUM ('RECEPCION','DIAGNOSTICO','ESPERA_REFACCION','REPARACION','PRUEBAS_RUTA','TERMINADA','ENTREGADO');
@@ -25,14 +21,12 @@ CREATE TABLE schema_version (
 );
 INSERT INTO schema_version(version) VALUES (4);
 
--- Parametros editables solo por ADMIN (margen e impuesto por defecto, RF-19)
 CREATE TABLE configuracion (
   clave text PRIMARY KEY,
   valor text NOT NULL
 );
 INSERT INTO configuracion(clave, valor) VALUES ('margen_pct','30'), ('impuesto_pct','16');
 
--- ---------- Personas y vehiculos ----------
 CREATE TABLE usuario (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   nombre        text NOT NULL,
@@ -68,7 +62,6 @@ CREATE TABLE vehiculo (
   creado_en          timestamptz NOT NULL DEFAULT now()
 );
 
--- ---------- Orden de trabajo ----------
 CREATE TABLE orden_trabajo (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   folio           serial UNIQUE,
@@ -83,8 +76,8 @@ CREATE TABLE orden_trabajo (
   creado_en       timestamptz NOT NULL DEFAULT now(),
   actualizado_en  timestamptz NOT NULL DEFAULT now(),
   entregado_en    timestamptz,
-  nivel_combustible_pct smallint CHECK (nivel_combustible_pct BETWEEN 0 AND 100),   -- RF-01
-  carga_bateria_pct     smallint CHECK (carga_bateria_pct BETWEEN 0 AND 100)       -- RF-01
+  nivel_combustible_pct smallint CHECK (nivel_combustible_pct BETWEEN 0 AND 100),
+  carga_bateria_pct     smallint CHECK (carga_bateria_pct BETWEEN 0 AND 100)
 );
 CREATE INDEX idx_ot_vehiculo ON orden_trabajo(vehiculo_id);
 CREATE INDEX idx_ot_tecnico  ON orden_trabajo(tecnico_id);
@@ -125,7 +118,6 @@ CREATE TABLE checklist_hv (
   firmado_en       timestamptz
 );
 
--- ---------- Cotizacion, inventario ----------
 CREATE TABLE cotizacion (
   id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   ot_id      uuid NOT NULL REFERENCES orden_trabajo(id) ON DELETE CASCADE,
@@ -154,16 +146,16 @@ CREATE TABLE partida (
   descripcion        text,
   refaccion_id       uuid REFERENCES refaccion(id),
   cantidad           numeric(10,2) NOT NULL DEFAULT 1 CHECK (cantidad > 0),
-  costo              numeric(12,2) NOT NULL CHECK (costo >= 0),     -- costo UNITARIO
+  costo              numeric(12,2) NOT NULL CHECK (costo >= 0),
   margen_pct         numeric(5,2)  NOT NULL DEFAULT 0 CHECK (margen_pct >= 0),
   impuesto_pct       numeric(5,2)  NOT NULL DEFAULT 0 CHECK (impuesto_pct >= 0),
-  precio_cliente     numeric(12,2) NOT NULL DEFAULT 0 CHECK (precio_cliente >= 0),  -- DERIVADO por trigger (RN-04)
+  precio_cliente     numeric(12,2) NOT NULL DEFAULT 0 CHECK (precio_cliente >= 0),
   autorizada         boolean NOT NULL DEFAULT false,
   medio_autorizacion medio_autorizacion,
   autorizado_en      timestamptz,
   creado_en          timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT chk_autorizacion_trazable
-    CHECK (NOT autorizada OR (medio_autorizacion IS NOT NULL AND autorizado_en IS NOT NULL))   -- RN-05
+    CHECK (NOT autorizada OR (medio_autorizacion IS NOT NULL AND autorizado_en IS NOT NULL))
 );
 CREATE INDEX idx_partida_cotizacion ON partida(cotizacion_id);
 
@@ -179,7 +171,6 @@ CREATE TABLE movimiento_inventario (
 CREATE INDEX idx_mov_inv_refaccion ON movimiento_inventario(refaccion_id);
 CREATE INDEX idx_mov_inv_ot ON movimiento_inventario(ot_id);
 
--- ---------- Herramientas y pedidos ----------
 CREATE TABLE herramienta (
   id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   nombre         text NOT NULL,
@@ -196,7 +187,7 @@ CREATE TABLE prestamo_herramienta (
   prestado_en    timestamptz NOT NULL DEFAULT now(),
   devuelto_en    timestamptz
 );
--- Una herramienta no puede estar prestada dos veces a la vez
+
 CREATE UNIQUE INDEX uq_prestamo_abierto ON prestamo_herramienta(herramienta_id) WHERE devuelto_en IS NULL;
 
 CREATE TABLE pedido_proveedor (
@@ -210,7 +201,6 @@ CREATE TABLE pedido_proveedor (
   creado_en    timestamptz NOT NULL DEFAULT now()
 );
 
--- ---------- Garantias, pagos, auditoria ----------
 CREATE TABLE garantia (
   id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   ot_id             uuid NOT NULL REFERENCES orden_trabajo(id),
@@ -243,7 +233,6 @@ CREATE TABLE auditoria (
 );
 CREATE INDEX idx_auditoria_fecha ON auditoria(creado_en);
 
--- RNF-08: la bitacora es inmutable (ni siquiera el dueno puede editar o borrar filas)
 CREATE FUNCTION fn_auditoria_inmutable() RETURNS trigger AS $$
 BEGIN
   RAISE EXCEPTION 'La bitacora de auditoria es inmutable.';
@@ -251,8 +240,6 @@ END $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_auditoria_inmutable BEFORE UPDATE OR DELETE ON auditoria
   FOR EACH ROW EXECUTE FUNCTION fn_auditoria_inmutable();
 
-
--- RF-21: historial inmutable de versiones de cada cotizacion (una version por cambio)
 CREATE TABLE cotizacion_version (
   id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   ot_id            uuid NOT NULL REFERENCES orden_trabajo(id) ON DELETE CASCADE,
@@ -273,7 +260,6 @@ END $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_cotizacion_version_inmutable BEFORE UPDATE ON cotizacion_version
   FOR EACH ROW EXECUTE FUNCTION fn_cotizacion_version_inmutable();
 
--- ASVS: cierre de sesion real. Se guardan los identificadores (jti) de los tokens revocados.
 CREATE TABLE token_revocado (
   jti         text PRIMARY KEY,
   usuario_id  uuid,
@@ -282,12 +268,6 @@ CREATE TABLE token_revocado (
 );
 CREATE INDEX idx_token_revocado_expira ON token_revocado(expira);
 
--- =============================================================================
--- REGLAS DE NEGOCIO CRITICAS (ERS seccion 10). La base de datos es la autoridad
--- final: aplican aunque alguien escriba directo a la base.
--- =============================================================================
-
--- RN-01: bloqueo HV
 CREATE FUNCTION fn_validar_bloqueo_hv() RETURNS trigger AS $$
 DECLARE
   v_tipo tipo_motor; v_cl RECORD; v_cert boolean;
@@ -316,7 +296,6 @@ END $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_bloqueo_hv BEFORE UPDATE ON orden_trabajo
   FOR EACH ROW EXECUTE FUNCTION fn_validar_bloqueo_hv();
 
--- RN-02: solo se entrega desde TERMINADA y con saldo en cero
 CREATE FUNCTION fn_validar_bloqueo_entrega() RETURNS trigger AS $$
 BEGIN
   IF NEW.estado = 'ENTREGADO' AND OLD.estado IS DISTINCT FROM 'ENTREGADO' THEN
@@ -338,7 +317,6 @@ BEGIN NEW.actualizado_en = now(); RETURN NEW; END $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_touch_ot BEFORE UPDATE ON orden_trabajo
   FOR EACH ROW EXECUTE FUNCTION fn_touch_actualizado_en();
 
--- RN-04: el precio al cliente siempre se deriva (costo unitario x cantidad, margen, impuesto)
 CREATE FUNCTION fn_calcular_precio_partida() RETURNS trigger AS $$
 BEGIN
   NEW.precio_cliente := ROUND(NEW.costo * NEW.cantidad * (1 + NEW.margen_pct/100) * (1 + NEW.impuesto_pct/100), 2);
@@ -347,7 +325,6 @@ END $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_precio_partida BEFORE INSERT OR UPDATE ON partida
   FOR EACH ROW EXECUTE FUNCTION fn_calcular_precio_partida();
 
--- Saldo = partidas autorizadas - pagos (alimenta RN-02)
 CREATE FUNCTION fn_recalcular_saldo(p_ot_id uuid) RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
 DECLARE v_total numeric(12,2); v_pagado numeric(12,2);
@@ -377,7 +354,6 @@ BEGIN PERFORM fn_recalcular_saldo(COALESCE(NEW.ot_id, OLD.ot_id)); RETURN NULL; 
 CREATE TRIGGER trg_pago_saldo AFTER INSERT OR UPDATE OR DELETE ON pago
   FOR EACH ROW EXECUTE FUNCTION fn_trg_pago_saldo();
 
--- Cotizacion vigente de una OT (la crea si no existe)
 CREATE FUNCTION fn_cotizacion_vigente(p_ot_id uuid, p_usuario_id uuid) RETURNS uuid
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
 DECLARE v_cot uuid;
@@ -391,7 +367,6 @@ END $$;
 REVOKE ALL ON FUNCTION fn_cotizacion_vigente(uuid,uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION fn_cotizacion_vigente(uuid,uuid) TO app_taller;
 
--- RF-23 / RN-03 / RN-06: consumo de pieza ATOMICO (una sola transaccion)
 CREATE FUNCTION fn_consumir_refaccion(p_ot_id uuid, p_refaccion_id uuid, p_cantidad numeric, p_usuario_id uuid)
 RETURNS uuid
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
@@ -436,7 +411,6 @@ END $$;
 REVOKE ALL ON FUNCTION fn_consumir_refaccion(uuid,uuid,numeric,uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION fn_consumir_refaccion(uuid,uuid,numeric,uuid) TO app_taller;
 
--- RF-17 / RF-18 / RN-05: autorizar o rechazar una partida
 CREATE FUNCTION fn_autorizar_partida(p_partida_id uuid, p_autorizada boolean, p_medio medio_autorizacion, p_usuario_id uuid)
 RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
@@ -457,8 +431,6 @@ END $$;
 REVOKE ALL ON FUNCTION fn_autorizar_partida(uuid,boolean,medio_autorizacion,uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION fn_autorizar_partida(uuid,boolean,medio_autorizacion,uuid) TO app_taller;
 
-
--- RF-21: guarda una version (foto) de la cotizacion de la OT con sus partidas, costos y totales
 CREATE FUNCTION fn_snapshot_cotizacion(p_ot_id uuid, p_usuario_id uuid, p_motivo text) RETURNS integer
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
 DECLARE v_ver integer; v_tot numeric; v_aut numeric; v_json jsonb;
@@ -482,15 +454,11 @@ END $$;
 REVOKE ALL ON FUNCTION fn_snapshot_cotizacion(uuid,uuid,text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION fn_snapshot_cotizacion(uuid,uuid,text) TO app_taller;
 
--- =============================================================================
--- SEGURIDAD: RLS sobre informacion economica (ERS 9.2) y privilegios minimos
--- =============================================================================
 ALTER TABLE partida ENABLE ROW LEVEL SECURITY;
 CREATE POLICY partida_jefe_admin ON partida FOR ALL
   USING      (current_setting('app.rol', true) IN ('JEFE_TALLER','ADMIN'))
   WITH CHECK (current_setting('app.rol', true) IN ('JEFE_TALLER','ADMIN'));
 
--- Vista sin costo ni margen para recepcion y tecnicos (corre con permisos del dueno)
 CREATE VIEW partida_cliente WITH (security_barrier = true) AS
   SELECT id, cotizacion_id, concepto, descripcion, refaccion_id, cantidad, precio_cliente,
          autorizada, medio_autorizacion, autorizado_en, creado_en
@@ -499,8 +467,8 @@ CREATE VIEW partida_cliente WITH (security_barrier = true) AS
 GRANT USAGE ON SCHEMA public TO app_taller;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_taller;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_taller;
-REVOKE UPDATE, DELETE ON auditoria FROM app_taller;           -- solo INSERT y SELECT
-REVOKE UPDATE, DELETE ON cotizacion_version FROM app_taller;   -- solo INSERT y SELECT
+REVOKE UPDATE, DELETE ON auditoria FROM app_taller;
+REVOKE UPDATE, DELETE ON cotizacion_version FROM app_taller;
 REVOKE UPDATE ON token_revocado FROM app_taller;
 REVOKE INSERT, UPDATE, DELETE ON schema_version FROM app_taller;
 REVOKE ALL ON partida_cliente FROM app_taller;

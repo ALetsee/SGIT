@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Calcula la disponibilidad real del SGIT a partir de /var/log/sgit_salud.log (RNF-03: >= 99 % en horario laboral).
 
 Uso:  sgit-disponibilidad [--dias 30] [--horario 08-19] [--sabado]
@@ -15,7 +14,7 @@ ap.add_argument("--zona", default=os.environ.get("SGIT_TZ") or "America/Mexico_C
 ap.add_argument("--log", default=os.environ.get("SGIT_SALUD_LOG", "/var/log/sgit_salud.log"))
 a = ap.parse_args()
 h0, h1 = (int(x) for x in a.horario.split("-"))
-zona = ZoneInfo(a.zona)   # el servidor suele estar en UTC; el horario laboral es el del taller
+zona = ZoneInfo(a.zona)
 try:
     lineas = open(a.log, encoding="utf-8").read().splitlines()
 except OSError:
@@ -42,7 +41,6 @@ def resumen(nombre, datos):
     if not datos:
         print(f"{nombre:28} sin datos"); return None
     ok = sum(1 for _, e in datos if e == "OK"); pct = ok / len(datos) * 100
-    # incidentes: rachas consecutivas de FALLO
     inc, racha, peor = 0, 0, 0
     for _, e in datos:
         if e == "FALLO":

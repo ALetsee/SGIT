@@ -24,12 +24,11 @@ SELECT ot.id, ot.folio, ot.estado, ot.falla_reportada, ot.km_ingreso, ot.prometi
   JOIN cliente  c ON c.id = v.cliente_id
   LEFT JOIN usuario t ON t.id = ot.tecnico_id`
 
-// El técnico no ve información económica (ERS 9.1).
 func ocultarEconomia(u *User, rows ...map[string]any) {
 	if u.Rol == RolTec {
 		for _, m := range rows {
 			delete(m, "saldo")
-			delete(m, "cliente_telefono") // datos personales: el técnico no los necesita
+			delete(m, "cliente_telefono")
 		}
 	}
 }
@@ -37,8 +36,6 @@ func ocultarEconomia(u *User, rows ...map[string]any) {
 func (a *App) otPorID(r *http.Request, q queryer, id string) (map[string]any, error) {
 	return oneRow(r.Context(), q, otSelect+` WHERE ot.id = $1`, id)
 }
-
-// ---------- OT: alta, consulta, cambios ----------
 
 func (a *App) crearOt(w http.ResponseWriter, r *http.Request, u *User) {
 	var in struct {
@@ -73,7 +70,7 @@ func (a *App) crearOt(w http.ResponseWriter, r *http.Request, u *User) {
 		if e != nil {
 			return e
 		}
-		comb, carga, e := nivelesIngreso(str(v, "tipo"), in.NivelCombustible, in.CargaBateria) // RF-01
+		comb, carga, e := nivelesIngreso(str(v, "tipo"), in.NivelCombustible, in.CargaBateria)
 		if e != nil {
 			return e
 		}
@@ -176,7 +173,6 @@ func (a *App) eliminarOt(w http.ResponseWriter, r *http.Request, u *User) {
 	writeJSON(w, 200, map[string]any{"ok": true})
 }
 
-// RF-09: el jefe de taller asigna la OT al técnico adecuado.
 func (a *App) asignarTecnico(w http.ResponseWriter, r *http.Request, u *User) {
 	id, err := pathID(r, "id")
 	if err != nil {
@@ -222,7 +218,6 @@ func (a *App) asignarTecnico(w http.ResponseWriter, r *http.Request, u *User) {
 	writeJSON(w, 200, out)
 }
 
-// RF-11 / RF-15 / RF-32: cambio de estado. RN-01 y RN-02 las aplica la base de datos.
 func (a *App) cambiarEstado(w http.ResponseWriter, r *http.Request, u *User) {
 	id, err := pathID(r, "id")
 	if err != nil {
@@ -259,7 +254,7 @@ func (a *App) cambiarEstado(w http.ResponseWriter, r *http.Request, u *User) {
 		}
 		prev := str(cur, "estado")
 		if prev != in.Estado {
-			// RF-05: mínimo configurable de fotografías antes de iniciar el diagnóstico
+
 			if prev == "RECEPCION" && in.Estado == "DIAGNOSTICO" && a.cfg.FotosMin > 0 {
 				n, e := oneRow(r.Context(), tx, `SELECT count(*) AS n FROM fotografia WHERE ot_id=$1`, id)
 				if e != nil {
@@ -288,7 +283,6 @@ func (a *App) cambiarEstado(w http.ResponseWriter, r *http.Request, u *User) {
 	writeJSON(w, 200, out)
 }
 
-// RF-38: motivo del retraso.
 func (a *App) registrarRetraso(w http.ResponseWriter, r *http.Request, u *User) {
 	id, err := pathID(r, "id")
 	if err != nil {
@@ -313,8 +307,6 @@ func (a *App) registrarRetraso(w http.ResponseWriter, r *http.Request, u *User) 
 	}
 	writeJSON(w, 200, row)
 }
-
-// ---------- Checklist de alto voltaje (RF-13, RF-14, RF-15) ----------
 
 func (a *App) obtenerChecklist(w http.ResponseWriter, r *http.Request, u *User) {
 	id, err := pathID(r, "id")
@@ -366,7 +358,7 @@ func (a *App) firmarChecklist(w http.ResponseWriter, r *http.Request, u *User) {
 		if str(v, "tipo") == "COMBUSTION" {
 			return httpErr(400, "El vehículo es COMBUSTION; el checklist HV solo aplica a EV/PHEV/HEV.")
 		}
-		// La especialidad se lee de la base, no del token.
+
 		t, e := oneRow(r.Context(), tx, `SELECT COALESCE(especialidad::text,'') AS esp FROM usuario WHERE id=$1`, u.ID)
 		if e != nil {
 			return e
@@ -399,8 +391,6 @@ func (a *App) firmarChecklist(w http.ResponseWriter, r *http.Request, u *User) {
 	}
 	writeJSON(w, 200, out)
 }
-
-// ---------- Inspección y fotografías (RF-03, RF-04, RF-05) ----------
 
 func (a *App) obtenerInspeccion(w http.ResponseWriter, r *http.Request, u *User) {
 	id, err := pathID(r, "id")
@@ -496,7 +486,7 @@ func (a *App) subirFoto(w http.ResponseWriter, r *http.Request, u *User) {
 	if n, err := oneRow(r.Context(), a.db, `SELECT count(*) AS n FROM fotografia WHERE ot_id=$1`, id); err != nil {
 		fail(w, err)
 		return
-	} else if have, _ := n["n"].(int64); int(have) >= a.cfg.FotosMax { // cuota por orden: evita llenar el disco
+	} else if have, _ := n["n"].(int64); int(have) >= a.cfg.FotosMax {
 		fail(w, httpErr(409, "Esta orden ya tiene el máximo de %d fotografías.", a.cfg.FotosMax))
 		return
 	}
@@ -542,7 +532,7 @@ func (a *App) verFoto(w http.ResponseWriter, r *http.Request, u *User) {
 	}
 	path := filepath.Clean(str(row, "ruta_archivo"))
 	base := filepath.Clean(a.cfg.FotosDir) + string(os.PathSeparator)
-	if !strings.HasPrefix(path, base) { // defensa contra rutas fuera del almacén
+	if !strings.HasPrefix(path, base) {
 		fail(w, httpErr(404, "Archivo no disponible."))
 		return
 	}
@@ -550,8 +540,6 @@ func (a *App) verFoto(w http.ResponseWriter, r *http.Request, u *User) {
 	w.Header().Set("Content-Security-Policy", "default-src 'none'")
 	http.ServeFile(w, r, path)
 }
-
-// ---------- Horas trabajadas (RF-12, RF-33) ----------
 
 func (a *App) registrarHoras(w http.ResponseWriter, r *http.Request, u *User) {
 	id, err := pathID(r, "id")

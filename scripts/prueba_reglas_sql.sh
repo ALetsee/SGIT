@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Prueba las reglas de negocio criticas directamente contra PostgreSQL, usando el
-# rol restringido de la aplicacion. Todo se revierte al final: no deja datos.
+
 set -uo pipefail
 
 ENV_FILE="${SGIT_ENV:-/etc/sgit/sgit.env}"

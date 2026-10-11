@@ -1,5 +1,5 @@
-// Service worker del SGIT (PWA). Los datos del taller NUNCA se guardan en el dispositivo:
-// solo se guardan los archivos estaticos y una pantalla de aviso para cuando no hay conexion.
+
+
 const VERSION = 'sgit-1.2.0';
 const PRECARGA = ['/offline', '/static/icon-192.png', '/static/icon.svg'];
 
@@ -22,7 +22,7 @@ self.addEventListener('fetch', (e) => {
   if (url.origin !== self.location.origin) return;
 
   if (url.pathname.startsWith('/static/')) {
-    // Estaticos: se sirven desde el dispositivo y se actualizan en segundo plano (ahorra ancho de banda).
+    
     e.respondWith(caches.open(VERSION).then(async (c) => {
       const guardado = await c.match(r);
       const red = fetch(r).then((x) => { if (x.ok) c.put(r, x.clone()); return x; }).catch(() => guardado);
@@ -31,7 +31,7 @@ self.addEventListener('fetch', (e) => {
     return;
   }
   if (r.mode === 'navigate') {
-    // Paginas con datos: siempre de la red. Sin conexion se muestra un aviso claro; nunca se guardan.
+    
     e.respondWith(fetch(r).catch(() => caches.match('/offline')));
   }
 });

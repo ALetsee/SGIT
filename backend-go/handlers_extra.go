@@ -8,10 +8,6 @@ import (
 	"unicode/utf8"
 )
 
-// ---------- RF-21: versiones de cotización ----------
-
-// snapshot guarda una versión inmutable de la cotización de la OT (partidas, costos y totales).
-// Se llama dentro de la misma transacción que el cambio, así que versión y cambio van juntos.
 func snapshot(ctx context.Context, tx *sql.Tx, u *User, otID, motivo string) error {
 	_, err := tx.ExecContext(ctx, `SELECT fn_snapshot_cotizacion($1::uuid,$2::uuid,$3)`, otID, u.ID, motivo)
 	return err
@@ -39,8 +35,6 @@ func (a *App) versionesCotizacion(w http.ResponseWriter, r *http.Request, u *Use
 	writeJSON(w, 200, rows)
 }
 
-// ---------- RF-01: nivel de combustible o carga al recibir el vehículo ----------
-
 func ptrAny(p *int) any {
 	if p == nil {
 		return nil
@@ -48,8 +42,6 @@ func ptrAny(p *int) any {
 	return *p
 }
 
-// nivelesIngreso exige el dato que corresponde al tipo de motor (RF-01 y RF-02):
-// combustión y HEV registran combustible; EV registra carga; PHEV registra ambos.
 func nivelesIngreso(tipo string, comb, carga *int) (any, any, error) {
 	for _, c := range []struct {
 		p      *int
@@ -89,8 +81,6 @@ func nivelesIngreso(tipo string, comb, carga *int) (any, any, error) {
 	return ptrAny(comb), ptrAny(carga), nil
 }
 
-// ---------- Contraseñas y sesiones (ASVS) ----------
-
 var contrasenasComunes = map[string]bool{
 	"password1234": true, "password12345": true, "contrasena123": true, "contraseña123": true, "contrasena1234": true,
 	"123456789012": true, "1234567890123": true, "qwertyuiop12": true, "qwertyuiopas": true, "administrador": true,
@@ -99,7 +89,6 @@ var contrasenasComunes = map[string]bool{
 	"welcome12345": true, "changeme1234": true, "000000000000": true, "111111111111": true,
 }
 
-// validatePassword: mínimo 12 caracteres, sin contraseñas comunes ni el propio correo dentro.
 func validatePassword(pw, email string) error {
 	n := utf8.RuneCountInString(pw)
 	if n < 12 {
@@ -121,7 +110,6 @@ func validatePassword(pw, email string) error {
 	return nil
 }
 
-// logout revoca el token actual: aunque alguien lo hubiera copiado, deja de servir.
 func (a *App) logout(w http.ResponseWriter, r *http.Request, u *User) {
 	if u.JTI != "" {
 		if _, err := a.db.ExecContext(r.Context(),
@@ -135,7 +123,6 @@ func (a *App) logout(w http.ResponseWriter, r *http.Request, u *User) {
 	writeJSON(w, 200, map[string]any{"ok": true})
 }
 
-// cambiarPassword: el usuario cambia la suya. Invalida el resto de sus sesiones y devuelve un token nuevo.
 func (a *App) cambiarPassword(w http.ResponseWriter, r *http.Request, u *User) {
 	var in struct {
 		Actual string `json:"password_actual"`
@@ -195,7 +182,6 @@ func (a *App) cambiarPassword(w http.ResponseWriter, r *http.Request, u *User) {
 	writeJSON(w, 200, map[string]any{"ok": true, "access_token": a.signJWT(u.ID)})
 }
 
-// restablecerPassword: el administrador asigna una contraseña nueva a otro usuario (olvidó la suya).
 func (a *App) restablecerPassword(w http.ResponseWriter, r *http.Request, u *User) {
 	id, err := pathID(r, "id")
 	if err != nil {
@@ -235,8 +221,6 @@ func (a *App) restablecerPassword(w http.ResponseWriter, r *http.Request, u *Use
 	}
 	writeJSON(w, 200, map[string]any{"ok": true})
 }
-
-// ---------- RF-42: resumen del estado del taller (pensado para el celular del gerente) ----------
 
 func (a *App) estadoTaller(w http.ResponseWriter, r *http.Request, u *User) {
 	ctx := r.Context()
@@ -285,14 +269,12 @@ func (a *App) estadoTaller(w http.ResponseWriter, r *http.Request, u *User) {
 		"entregadas_hoy": res["entregadas_hoy"], "por_estado": porEstado, "retrasadas_lista": lista,
 		"herramientas_sin_devolver": extra["herramientas_sin_devolver"], "refacciones_bajo_minimo": extra["refacciones_bajo_minimo"],
 	}
-	if isPrivileged(u) { // la información económica global es solo de jefe y administrador
+	if isPrivileged(u) {
 		out["por_cobrar"] = res["por_cobrar"]
 	}
 	writeJSON(w, 200, out)
 }
 
-// exigirAsignado: un técnico solo trabaja las órdenes que tiene asignadas (configurable por el administrador:
-// «tecnico_solo_asignadas»). Jefe, administrador y recepción no se ven afectados.
 func (a *App) exigirAsignado(ctx context.Context, q queryer, u *User, otID string) error {
 	if u.Rol != RolTec {
 		return nil
@@ -304,8 +286,7 @@ func (a *App) exigirAsignado(ctx context.Context, q queryer, u *User, otID strin
 	if err != nil {
 		return err
 	}
-	// Mientras la orden no tenga técnico asignado, la puede trabajar cualquiera (primero en llegar);
-	// una vez asignada a alguien, solo esa persona (y jefe/administrador, que no pasan por aquí) la toca.
+
 	if t := str(row, "t"); t != "" && t != u.ID {
 		return httpErr(403, "Esta orden está asignada a otro técnico. Pídele al jefe de taller que te la reasigne.")
 	}

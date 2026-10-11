@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-# Prueba de punta a punta de la API del SGIT (flujo de una orden, roles y reglas).
-# Crea datos de prueba con el prefijo "PRUEBA" (no toca datos reales).
-# Uso:  SGIT_ADMIN_EMAIL=... SGIT_ADMIN_PASSWORD=... ./prueba_api.sh
+
 set -uo pipefail
 
 API="${SGIT_API:-http://127.0.0.1:8081}"
@@ -17,7 +15,7 @@ PW='Prueba-Segura-2026!'
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 OK=0; FAIL=0; CODE=""; BODY=""
 
-req() { # metodo ruta token [json]
+req() {
   local m="$1" p="$2" t="${3:-}" d="${4:-}"
   local args=(-s -o "$TMP/body" -w '%{http_code}' -X "$m" "$API$p" -H 'Content-Type: application/json')
   [[ -n "$t" ]] && args+=(-H "Authorization: Bearer $t")
@@ -31,15 +29,15 @@ for k in sys.argv[1].split("."):
     d = d[int(k)] if isinstance(d,list) else d.get(k)
     if d is None: break
 print("" if d is None else d)' "$1" 2>/dev/null; }
-check() { # descripcion esperado
+check() {
   if [[ "$CODE" == "$2" ]]; then echo "OK    $1 (HTTP $CODE)"; OK=$((OK+1))
   else echo "FALLO $1: se esperaba HTTP $2 y fue $CODE -> $BODY"; FAIL=$((FAIL+1)); fi
 }
-expect() { # descripcion valor_obtenido valor_esperado
+expect() {
   if [[ "$2" == "$3" ]]; then echo "OK    $1 ($2)"; OK=$((OK+1))
   else echo "FALLO $1: se esperaba '$3' y fue '$2'"; FAIL=$((FAIL+1)); fi
 }
-absent() { # descripcion texto_que_no_debe_aparecer
+absent() {
   if [[ "$BODY" != *"$2"* ]]; then echo "OK    $1"; OK=$((OK+1))
   else echo "FALLO $1: aparece '$2' en la respuesta"; FAIL=$((FAIL+1)); fi
 }

@@ -1,19 +1,5 @@
 #!/usr/bin/env bash
-###############################################################################
-# SGIT - Reiniciar los DATOS (para repetir pruebas y la demostracion)
-#
-# Borra: ordenes, clientes, vehiculos, inventario, herramientas, pagos, garantias,
-#        fotografias, usuarios que NO sean administradores y la bitacora de auditoria.
-# Conserva: la instalacion, los servicios, la configuracion (margen e IVA), los
-#           certificados y a TODOS los administradores (con su misma contrasena).
-#
-# Uso:   sudo ./reiniciar_datos.sh          pide escribir BORRAR para confirmar
-#        sudo ./reiniciar_datos.sh --si     sin preguntar
-#
-# Antes de borrar hace un respaldo cifrado (sgit-respaldo). Los folios vuelven a 1.
-# SOLO para entornos de prueba o demostracion: borra tambien la bitacora de auditoria,
-# que en operacion real es inmutable. No lo uses cuando ya haya datos reales.
-###############################################################################
+
 set -euo pipefail
 
 ENV_FILE=/etc/sgit/sgit.env

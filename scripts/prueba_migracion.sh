@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
-# Verifica que las migraciones dejen una base antigua IDENTICA a una instalacion nueva, desde CADA version historica.
-#   para cada esquema de database/historial/: crea una base con ese esquema (y un dato), le aplica las
-#   migraciones pendientes en orden y compara su estructura completa con la de una instalacion nueva.
-# Usa bases temporales; no toca taller_db. Ejecutar como root.
+
 set -uo pipefail
 DIR="${SGIT_DB_DIR:-/opt/sgit/database}"
 [[ $EUID -eq 0 ]] || { echo "Ejecuta con sudo." >&2; exit 1; }

@@ -1,14 +1,11 @@
--- Migracion 004: version 3 -> 4
---   RF-01  nivel de combustible / porcentaje de carga por ingreso
---   RF-21  historial inmutable de versiones de cotizacion
---   ASVS   cierre de sesion real (tokens revocados) y vigencia de sesiones tras cambiar la contrasena
+
+
 BEGIN;
 ALTER TABLE usuario ADD COLUMN password_cambiada_en timestamptz NOT NULL DEFAULT now();
 ALTER TABLE orden_trabajo
   ADD COLUMN nivel_combustible_pct smallint CHECK (nivel_combustible_pct BETWEEN 0 AND 100),
   ADD COLUMN carga_bateria_pct     smallint CHECK (carga_bateria_pct BETWEEN 0 AND 100);
 
--- RF-21: historial inmutable de versiones de cada cotizacion (una version por cambio)
 CREATE TABLE cotizacion_version (
   id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   ot_id            uuid NOT NULL REFERENCES orden_trabajo(id) ON DELETE CASCADE,
@@ -29,7 +26,6 @@ END $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_cotizacion_version_inmutable BEFORE UPDATE ON cotizacion_version
   FOR EACH ROW EXECUTE FUNCTION fn_cotizacion_version_inmutable();
 
--- ASVS: cierre de sesion real. Se guardan los identificadores (jti) de los tokens revocados.
 CREATE TABLE token_revocado (
   jti         text PRIMARY KEY,
   usuario_id  uuid,
@@ -38,7 +34,6 @@ CREATE TABLE token_revocado (
 );
 CREATE INDEX idx_token_revocado_expira ON token_revocado(expira);
 
--- RF-21: guarda una version (foto) de la cotizacion de la OT con sus partidas, costos y totales
 CREATE FUNCTION fn_snapshot_cotizacion(p_ot_id uuid, p_usuario_id uuid, p_motivo text) RETURNS integer
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
 DECLARE v_ver integer; v_tot numeric; v_aut numeric; v_json jsonb;

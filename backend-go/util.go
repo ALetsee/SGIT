@@ -27,8 +27,6 @@ const (
 	RolAdmin = "ADMIN"
 )
 
-// ---------- Errores ----------
-
 type apiError struct {
 	Status int
 	Msg    string
@@ -46,7 +44,6 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-// fail traduce cualquier error a una respuesta HTTP legible, sin exponer SQL interno.
 func fail(w http.ResponseWriter, err error) {
 	var ae *apiError
 	var pe *pq.Error
@@ -66,7 +63,7 @@ func fail(w http.ResponseWriter, err error) {
 
 func mapPG(pe *pq.Error) (int, string) {
 	switch string(pe.Code) {
-	case "P0001": // RAISE EXCEPTION de las reglas de negocio
+	case "P0001":
 		msg := pe.Message
 		switch {
 		case strings.HasPrefix(msg, "RN-01"):
@@ -99,8 +96,6 @@ func mapPG(pe *pq.Error) (int, string) {
 	return 500, "Error interno al procesar la operación en base de datos."
 }
 
-// ---------- Entrada ----------
-
 var (
 	uuidRe  = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 	emailRe = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
@@ -118,8 +113,6 @@ func pathID(r *http.Request, name string) (string, error) {
 
 func decode(r *http.Request, dst any) error { return decodeLimit(r, dst, 1<<20) }
 
-// decodeLimit lee el cuerpo con un tope de tamaño, rechaza el carácter nulo (PostgreSQL no lo admite
-// en texto) y los campos desconocidos (equivalente a forbidNonWhitelisted).
 func decodeLimit(r *http.Request, dst any, max int64) error {
 	body, err := io.ReadAll(http.MaxBytesReader(nil, r.Body, max))
 	if err != nil {
@@ -136,7 +129,6 @@ func decodeLimit(r *http.Request, dst any, max int64) error {
 	return nil
 }
 
-// nz devuelve nil si el texto está vacío, para guardar NULL en la base.
 func nz(s string) any {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -164,8 +156,6 @@ func optional(s, nombre string, max int) (any, error) {
 	return nz(s), nil
 }
 
-// numStr valida un número JSON dentro de un rango y lo entrega como texto
-// para que PostgreSQL lo convierta a numeric sin perder precisión.
 func numStr(n json.Number, nombre string, min, max float64) (string, error) {
 	f, err := strconv.ParseFloat(string(n), 64)
 	if err != nil || math.IsNaN(f) || math.IsInf(f, 0) {
@@ -240,13 +230,10 @@ func newUUID() string {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
-// ---------- Consultas ----------
-
 type queryer interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 }
 
-// rowsToMaps devuelve cada fila como un mapa columna -> valor (numeric y uuid como texto).
 func rowsToMaps(ctx context.Context, q queryer, query string, args ...any) ([]map[string]any, error) {
 	rs, err := q.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -307,13 +294,12 @@ func str(m map[string]any, k string) string {
 	return ""
 }
 
-// withTx abre una transacción y fija app.rol para que apliquen las políticas RLS.
 func (a *App) withTx(ctx context.Context, u *User, fn func(tx *sql.Tx) error) error {
 	tx, err := a.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback() //nolint:errcheck
+	defer tx.Rollback()
 	rol := ""
 	if u != nil {
 		rol = u.Rol
@@ -331,7 +317,6 @@ type execer interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
-// audit registra una acción sensible (RF-41). La tabla es inmutable (RNF-08).
 func audit(ctx context.Context, x execer, u *User, accion, tabla, registroID string, datos any) error {
 	var js any
 	if datos != nil {

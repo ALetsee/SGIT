@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Arma el instalador autoextraible desde este repositorio:  ./instalador/construir.sh
-# Resultado: ./sgit-instalador.sh (cabecera con el instalador + el proyecto empaquetado).
+
 set -euo pipefail
 RAIZ="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$RAIZ"

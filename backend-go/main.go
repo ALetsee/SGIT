@@ -107,7 +107,7 @@ func secureHeaders(next http.Handler) http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Content-Security-Policy", "default-src 'none'")
-		// PostgreSQL no admite el carácter nulo en texto: se rechaza antes de llegar a la base
+
 		if strings.Contains(r.URL.RawQuery, "%00") || strings.Contains(r.URL.RawPath, "%00") || strings.ContainsRune(r.URL.Path, 0) {
 			writeJSON(w, 400, map[string]any{"statusCode": 400, "error": "La dirección contiene caracteres no permitidos."})
 			return
@@ -131,7 +131,7 @@ func main() {
 	if err := os.MkdirAll(cfg.FotosDir, 0o750); err != nil {
 		log.Fatalf("no se pudo crear %s: %v", cfg.FotosDir, err)
 	}
-	turnos := runtime.NumCPU() // argon2id usa 64 MB: se deja pasar un número pequeño de verificaciones a la vez
+	turnos := runtime.NumCPU()
 	if turnos < 2 {
 		turnos = 2
 	}
@@ -157,7 +157,6 @@ func main() {
 	log.Fatal(srv.ListenAndServe())
 }
 
-// crearAdmin: sgit-api crear-admin <correo> <nombre>   (contraseña en SGIT_ADMIN_PASSWORD)
 func crearAdmin(args []string) {
 	pw := os.Getenv("SGIT_ADMIN_PASSWORD")
 	if len(args) < 2 || len(pw) < 12 {
@@ -186,26 +185,22 @@ func (a *App) routes() {
 	m.HandleFunc("POST /auth/login", a.login)
 	R := a.route
 
-	// Sesión y contraseñas
 	R("POST /auth/logout", a.logout)
 	R("POST /auth/cambiar-password", a.cambiarPassword)
 	R("POST /usuarios/{id}/restablecer-password", a.restablecerPassword, RolAdmin)
 	R("GET /estado-taller", a.estadoTaller)
 	R("GET /ordenes-trabajo/{id}/cotizacion/versiones", a.versionesCotizacion, RolJefe, RolAdmin)
 
-	// Usuarios (ADMIN gestiona; JEFE consulta)
 	R("POST /usuarios", a.crearUsuario, RolAdmin)
 	R("GET /usuarios", a.listarUsuarios, RolAdmin, RolJefe)
 	R("PATCH /usuarios/{id}", a.actualizarUsuario, RolAdmin)
 
-	// Clientes y vehículos
 	R("POST /clientes", a.crearCliente, RolRecep, RolJefe, RolAdmin)
-	R("GET /clientes", a.listarClientes, RolRecep, RolJefe, RolAdmin) // datos personales: no para técnicos
+	R("GET /clientes", a.listarClientes, RolRecep, RolJefe, RolAdmin)
 	R("POST /vehiculos", a.crearVehiculo, RolRecep, RolJefe, RolAdmin)
 	R("GET /vehiculos", a.listarVehiculos)
 	R("GET /vehiculos/{id}/historial", a.historialVehiculo)
 
-	// Órdenes de trabajo
 	R("POST /ordenes-trabajo", a.crearOt, RolRecep, RolJefe, RolAdmin)
 	R("GET /ordenes-trabajo", a.listarOts)
 	R("GET /ordenes-trabajo/{id}", a.obtenerOt)
@@ -222,7 +217,6 @@ func (a *App) routes() {
 	R("POST /ordenes-trabajo/{id}/horas", a.registrarHoras, RolTec, RolJefe, RolAdmin)
 	R("GET /ordenes-trabajo/{id}/horas", a.listarHoras)
 
-	// Cotizaciones y partidas
 	R("GET /ordenes-trabajo/{id}/cotizacion", a.verCotizacion)
 	R("POST /ordenes-trabajo/{id}/partidas", a.crearPartida, RolJefe, RolAdmin)
 	R("POST /ordenes-trabajo/{id}/autorizar-todas", a.autorizarTodas, RolRecep, RolJefe, RolAdmin)
@@ -231,7 +225,6 @@ func (a *App) routes() {
 	R("POST /ordenes-trabajo/{id}/sin-cargo", a.autorizarSinCargo, RolJefe, RolAdmin)
 	R("POST /pagos/{id}/anular", a.anularPago, RolAdmin)
 
-	// Inventario
 	R("GET /refacciones", a.listarRefacciones)
 	R("POST /refacciones", a.crearRefaccion, RolJefe, RolAdmin)
 	R("PATCH /refacciones/{id}", a.editarRefaccion, RolAdmin)
@@ -239,14 +232,12 @@ func (a *App) routes() {
 	R("POST /ordenes-trabajo/{id}/consumos", a.consumirRefaccion, RolTec, RolJefe, RolAdmin)
 	R("GET /ordenes-trabajo/{id}/consumos", a.listarConsumos)
 
-	// Pagos, garantías y entrega
 	R("POST /ordenes-trabajo/{id}/pagos", a.crearPago, RolRecep, RolJefe, RolAdmin)
 	R("GET /ordenes-trabajo/{id}/pagos", a.listarPagos, RolRecep, RolJefe, RolAdmin)
 	R("POST /ordenes-trabajo/{id}/garantias", a.crearGarantia, RolRecep, RolJefe, RolAdmin)
 	R("GET /ordenes-trabajo/{id}/garantias", a.listarGarantias)
 	R("GET /ordenes-trabajo/{id}/orden-salida", a.ordenSalida, RolRecep, RolJefe, RolAdmin)
 
-	// Herramientas y pedidos
 	R("GET /herramientas", a.listarHerramientas)
 	R("POST /herramientas", a.crearHerramienta, RolJefe, RolAdmin)
 	R("POST /herramientas/{id}/prestamo", a.prestarHerramienta, RolTec, RolJefe, RolAdmin)
@@ -256,7 +247,6 @@ func (a *App) routes() {
 	R("GET /ordenes-trabajo/{id}/pedidos", a.listarPedidos)
 	R("PATCH /pedidos/{id}/recibido", a.pedidoRecibido, RolJefe, RolAdmin)
 
-	// Reportes, auditoría y configuración
 	R("GET /reportes/resumen", a.reporteResumen, RolJefe, RolAdmin)
 	R("GET /auditoria", a.listarAuditoria, RolAdmin)
 	R("GET /configuracion", a.verConfiguracion, RolJefe, RolAdmin)

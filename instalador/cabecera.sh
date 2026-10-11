@@ -1,29 +1,8 @@
 #!/usr/bin/env bash
-###############################################################################
-# SGIT - Sistema de Gestion Integral de Taller (Electro-Motor Services)
-# INSTALADOR COMPLETO: PostgreSQL + API en Go + Frontend en Python + Nginx/TLS
-#
-# Uso:   sudo ./sgit-instalador.sh [opciones]
-#   --reset-db            Borra y recrea la base (hace antes un respaldo). Necesario
-#                         si ya existe una base con el esquema anterior.
-#   --sin-nginx           No instala Nginx/TLS; la web queda en el puerto 8000.
-#   --fotos-minimas N     Minimo de fotografias para iniciar un diagnostico (def. 4).
-#   --admin-correo CORREO Correo del primer administrador.
-#   --dominio NOMBRE      Nombre del servidor para el certificado TLS.
-#   --letsencrypt         Pide un certificado valido de Let's Encrypt (requiere --dominio y
-#                         --correo; el dominio debe apuntar a este servidor y el puerto 80 ser
-#                         alcanzable desde Internet). Activa HSTS. Vuelve a pasar --dominio
-#                         cada vez que reinstales.
-#   --correo CORREO       Correo para los avisos de Let's Encrypt.
-#   --sin-wal             No activa el archivado continuo de WAL (evita reiniciar PostgreSQL;
-#                         sin el no hay recuperacion a un momento exacto).
-#   --ayuda               Muestra esta ayuda.
-#
-# Es idempotente: se puede volver a ejecutar sin romper lo ya instalado.
-###############################################################################
+
 set -euo pipefail
 umask 022
-SELF="$(readlink -f "$0")"   # ruta absoluta: despues se cambia de directorio
+SELF="$(readlink -f "$0")"
 
 DEST=/opt/sgit
 CONF_DIR=/etc/sgit
@@ -77,9 +56,8 @@ trap 'fail "Error inesperado en la linea $LINENO. Revisa $LOG. Puedes volver a e
 echo "=== Instalacion SGIT - $(date -Is) ==="
 
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
-cd /tmp   # evita avisos de "permission denied" al ejecutar psql como postgres
+cd /tmp
 
-# ---------------------------------------------------------------------------
 paso "0/9 Desempaquetando el proyecto"
 LINEA="$(awk '/^__SGIT_PAYLOAD_BELOW__$/ {print NR + 1; exit}' "$SELF")"
 [[ -n "$LINEA" ]] || fail "El instalador esta incompleto (no contiene el proyecto)."
@@ -87,7 +65,6 @@ tail -n +"$LINEA" "$SELF" | tar xz -C "$TMP" || fail "No se pudo extraer el proy
 for d in backend-go frontend-py database scripts; do [[ -d "$TMP/$d" ]] || fail "Falta la carpeta $d en el paquete."; done
 ok "Proyecto extraido"
 
-# ---------------------------------------------------------------------------
 paso "1/9 Paquetes del sistema"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq || fail "No se pudo ejecutar apt-get update. Revisa la conexion a Internet."
@@ -106,7 +83,6 @@ GMAJ="${GOV%%.*}"; GREST="${GOV#*.}"; GMIN="${GREST%%.*}"
 (( GMAJ > 1 || (GMAJ == 1 && GMIN >= 22) )) || fail "Se requiere Go 1.22 o superior y hay $GOV. En Ubuntu 24.04 o mas nuevo viene por defecto."
 ok "Go $GOV, Python $(python3 -V | awk '{print $2}')"
 
-# ---------------------------------------------------------------------------
 paso "2/9 Usuario de servicio y carpetas"
 id sgit >/dev/null 2>&1 || useradd --system --home-dir "$DATA_DIR" --shell /usr/sbin/nologin sgit
 install -d -m 755 "$DEST" "$DEST/bin"
@@ -114,7 +90,6 @@ install -d -m 750 -o sgit -g sgit "$DATA_DIR" "$DATA_DIR/fotos"
 install -d -m 750 "$BACKUP_DIR" "$CONF_DIR"
 ok "Usuario 'sgit' y carpetas listas"
 
-# ---------------------------------------------------------------------------
 paso "3/9 PostgreSQL"
 SYSTEMD=0; [[ -d /run/systemd/system ]] && SYSTEMD=1
 pgsu() { runuser -u postgres -- psql -X -q -v ON_ERROR_STOP=1 "$@"; }
@@ -133,8 +108,7 @@ if ss -ltnH "sport = :$PG_PORT" 2>/dev/null | awk '{print $4}' | grep -qE '^(0\.
   warn "PostgreSQL escucha en todas las interfaces. El ERS pide solo localhost: ajusta listen_addresses."
 fi
 
-# Archivo de configuracion con secretos generados (no se imprimen ni se versionan)
-set_env() { # clave valor
+set_env() {
   if grep -q "^$1=" "$ENV_FILE"; then sed -i "s|^$1=.*|$1=$2|" "$ENV_FILE"; else echo "$1=$2" >> "$ENV_FILE"; fi
 }
 if [[ ! -f "$ENV_FILE" ]]; then
@@ -167,22 +141,17 @@ if [[ -n "$DOMINIO" && -f "/etc/letsencrypt/live/$DOMINIO/fullchain.pem" ]]; the
 [[ -z "$FOTOS_MIN" ]] || set_env FOTOS_MINIMAS "$FOTOS_MIN"
 if [[ $SIN_NGINX -eq 1 ]]; then set_env WEB_BIND 0.0.0.0:8000; set_env SGIT_COOKIE_SECURE 0
 else set_env WEB_BIND 127.0.0.1:8000; set_env SGIT_COOKIE_SECURE 1; fi
-# Zona horaria del taller (el servidor suele estar en UTC): la base, la API y la web la usan para
-# "hoy", los periodos de los reportes y el horario laboral. Se cambia editando SGIT_TZ en sgit.env.
+
 ZONA="$(grep -E '^SGIT_TZ=' "$ENV_FILE" | head -1 | cut -d= -f2)"; ZONA="${ZONA:-America/Mexico_City}"
 [[ -e "/usr/share/zoneinfo/$ZONA" ]] || fail "La zona horaria '$ZONA' (SGIT_TZ en $ENV_FILE) no existe en este sistema."
 set_env SGIT_TZ "$ZONA"; set_env TZ "$ZONA"
 chown root:sgit "$ENV_FILE"; chmod 640 "$ENV_FILE"
 set -a; . "$ENV_FILE"; set +a
 
-# El proceso WEB (Flask) nunca debe ver DB_PASSWORD ni JWT_SECRET: no los necesita, y si alguien
-# tomara el control de ese proceso, esas dos variables le darian la base de datos y la capacidad de
-# forjar sesiones de cualquier usuario. Se le da un archivo de entorno aparte, con solo lo suyo.
 ENV_FILE_WEB="$CONF_DIR/sgit-web.env"
 grep -E '^(SGIT_API|SGIT_TZ|FLASK_SECRET|SGIT_COOKIE_SECURE|SGIT_HSTS|TZ)=' "$ENV_FILE" > "$ENV_FILE_WEB"
 chown root:sgit "$ENV_FILE_WEB"; chmod 640 "$ENV_FILE_WEB"
 
-# Rol de la aplicacion: sin privilegios de administrador
 pgsu -v pw="$DB_PASSWORD" -v rol="$DB_USER" <<'SQL'
 SELECT format('CREATE ROLE %I LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE', :'rol')
  WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'rol') \gexec
@@ -190,7 +159,6 @@ SELECT format('ALTER ROLE %I LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE PASSWORD 
 SQL
 ok "Rol '$DB_USER' sincronizado (sin superusuario)"
 
-# Base de datos y migraciones (cada cambio del esquema es un archivo database/migraciones/NNN_*.sql)
 ULTIMA=3
 for f in "$TMP"/database/migraciones/*.sql; do
   [[ -e "$f" ]] || continue
@@ -215,7 +183,7 @@ if [[ "$EXISTE" == "1" ]]; then
     for f in $(ls "$TMP"/database/migraciones/*.sql | sort); do
       n=$((10#$(basename "$f" | cut -c1-3)))
       if (( n > VER )); then
-        # por entrada estandar: el usuario postgres no puede leer la carpeta temporal de root
+
         if ! pgsu -d "$DB_NAME" < "$f"; then fail "Fallo la migracion $(basename "$f"). Cada migracion es una transaccion, asi que la base quedo como estaba. Respaldo en $PREVIO."; fi
         ok "Migracion $(basename "$f") aplicada; tus datos se conservaron"
       fi
@@ -237,7 +205,6 @@ TABLAS="$(pgsu -d "$DB_NAME" -tAc "SELECT count(*) FROM information_schema.table
 TRIG="$(pgsu -d "$DB_NAME" -tAc "SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal")"
 ok "Esquema version $VER_FINAL: $TABLAS tablas/vistas y $TRIG triggers"
 
-# Archivado continuo de WAL (RNF-07): junto con la copia base diaria permite recuperar a un momento exacto
 WAL_DIR=/var/backups/sgit_wal
 reiniciar_pg() {
   if [[ $SYSTEMD -eq 1 ]]; then systemctl restart postgresql
@@ -262,7 +229,6 @@ else
   warn "Se omitio el archivado de WAL (--sin-wal): habra respaldo diario pero no recuperacion a un momento exacto."
 fi
 
-# ---------------------------------------------------------------------------
 paso "4/9 Instalando el codigo"
 rm -rf "$DEST/src" "$DEST/frontend" "$DEST/scripts" "$DEST/docs" "$DEST/database"
 install -d "$DEST/src"
@@ -275,7 +241,6 @@ find "$DEST/frontend" -name '__pycache__' -prune -exec rm -rf {} + 2>/dev/null |
 chown -R root:root "$DEST"; chmod -R a+rX,go-w "$DEST"; chmod +x "$DEST"/scripts/*.sh "$DEST"/scripts/*.py
 ok "Codigo en $DEST"
 
-# ---------------------------------------------------------------------------
 paso "5/9 Compilando la API en Go"
 export GOCACHE="$TMP/gocache" GOFLAGS=""
 compilar_gopath() { ( cd "$DEST/src/backend-go" && GO111MODULE=off GOPATH=/usr/share/gocode go build -o "$DEST/bin/sgit-api" . ); }
@@ -285,7 +250,6 @@ elif compilar_modulos; then ok "API compilada con modulos de Go"
 else fail "No se pudo compilar la API en Go. Revisa los mensajes anteriores."; fi
 chmod 755 "$DEST/bin/sgit-api"
 
-# ---------------------------------------------------------------------------
 paso "6/9 Servicios"
 mapfile -t ENVV < <(grep -E '^[A-Z_]+=' "$ENV_FILE")
 GUNICORN="$(command -v gunicorn)"
@@ -352,8 +316,7 @@ else
   touch /var/log/sgit-api.log /var/log/sgit-web.log; chown sgit:sgit /var/log/sgit-api.log /var/log/sgit-web.log
   mapfile -t ENVV_WEB < <(grep -E '^(SGIT_API|SGIT_TZ|FLASK_SECRET|SGIT_COOKIE_SECURE|SGIT_HSTS|TZ)=' "$ENV_FILE")
   setsid runuser -u sgit -- env "${ENVV[@]}" "$DEST/bin/sgit-api" >>/var/log/sgit-api.log 2>&1 < /dev/null &
-  # env -i: este script ya trae DB_PASSWORD y JWT_SECRET exportados en su propio entorno (los necesita
-  # para la API y para pgsu); sin "-i" el proceso web los heredaria igual aunque no esten en ENVV_WEB.
+
   setsid runuser -u sgit -- env -i PATH="$PATH" HOME=/home/sgit "${ENVV_WEB[@]}" "$GUNICORN" --workers 2 --threads 2 --bind "$WEB_BIND" --chdir "$DEST/frontend" app:app >>/var/log/sgit-web.log 2>&1 < /dev/null &
 fi
 esperar() { for _ in $(seq 1 40); do curl -fsS "$1" >/dev/null 2>&1 && return 0; sleep 1; done; return 1; }
@@ -361,7 +324,6 @@ esperar "http://127.0.0.1:8081/salud" || fail "La API no respondio. Revisa: jour
 esperar "http://${WEB_BIND/0.0.0.0/127.0.0.1}/salud" || fail "El frontend no respondio. Revisa: journalctl -u sgit-web -n 50 (o /var/log/sgit-web.log)"
 ok "API (puerto 8081, solo local) y frontend (puerto 8000) responden"
 
-# ---------------------------------------------------------------------------
 paso "7/9 Primer administrador"
 HAY_ADMIN="$(pgsu -d "$DB_NAME" -tAc "SELECT count(*) FROM usuario WHERE rol='ADMIN'")"
 CRED_FILE=/root/sgit_admin_inicial.txt
@@ -375,7 +337,6 @@ else
   ok "Ya existe un administrador; no se crea otro"
 fi
 
-# ---------------------------------------------------------------------------
 paso "8/9 Nginx con TLS"
 IP="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
 URL="http://${WEB_BIND/0.0.0.0/${IP:-127.0.0.1}}"
@@ -458,7 +419,6 @@ if command -v ufw >/dev/null && ufw status 2>/dev/null | grep -q "Status: active
   else ufw allow 8000/tcp >/dev/null; ok "Firewall: puerto 8000 abierto"; fi
 fi
 
-# ---------------------------------------------------------------------------
 paso "9/9 Respaldos, comandos y verificacion"
 if [[ ! -f "$CONF_DIR/respaldo.key" ]]; then ( umask 077; openssl rand -base64 48 > "$CONF_DIR/respaldo.key" ); ok "Llave de cifrado de respaldos creada"; fi
 install -m 755 "$DEST/scripts/respaldo.sh" /usr/local/bin/sgit-respaldo

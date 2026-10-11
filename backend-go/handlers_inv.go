@@ -8,8 +8,6 @@ import (
 	"strconv"
 )
 
-// ---------- Autorización de partidas (RF-17, RF-18, RN-05) ----------
-
 func (a *App) autorizarPartida(w http.ResponseWriter, r *http.Request, u *User) {
 	id, err := pathID(r, "id")
 	if err != nil {
@@ -60,7 +58,6 @@ func (a *App) autorizarPartida(w http.ResponseWriter, r *http.Request, u *User) 
 	writeJSON(w, 200, map[string]any{"ok": true, "saldo": saldo})
 }
 
-// RF-17: autorizar el presupuesto completo de una sola vez.
 func (a *App) autorizarTodas(w http.ResponseWriter, r *http.Request, u *User) {
 	id, err := pathID(r, "id")
 	if err != nil {
@@ -106,7 +103,6 @@ func (a *App) autorizarTodas(w http.ResponseWriter, r *http.Request, u *User) {
 	writeJSON(w, 200, map[string]any{"autorizadas": n, "saldo": saldo})
 }
 
-// RF-40 / RN-04: solo el administrador cambia precios; la partida vuelve a requerir autorización.
 func (a *App) editarPartida(w http.ResponseWriter, r *http.Request, u *User) {
 	id, err := pathID(r, "id")
 	if err != nil {
@@ -182,8 +178,6 @@ func (a *App) editarPartida(w http.ResponseWriter, r *http.Request, u *User) {
 	}
 	writeJSON(w, 200, out)
 }
-
-// ---------- Inventario (RF-22, RF-23, RF-27) ----------
 
 func (a *App) listarRefacciones(w http.ResponseWriter, r *http.Request, u *User) {
 	cols := `r.id, r.nombre, r.categoria, r.existencia, r.existencia_minima,
@@ -395,7 +389,6 @@ func (a *App) entradaRefaccion(w http.ResponseWriter, r *http.Request, u *User) 
 	writeJSON(w, 200, out)
 }
 
-// RF-23: descuenta inventario y carga la pieza a la OT en una sola transacción (RN-03).
 func (a *App) consumirRefaccion(w http.ResponseWriter, r *http.Request, u *User) {
 	id, err := pathID(r, "id")
 	if err != nil {
@@ -456,8 +449,6 @@ func (a *App) listarConsumos(w http.ResponseWriter, r *http.Request, u *User) {
 	}
 	writeJSON(w, 200, rows)
 }
-
-// ---------- Pagos, garantías y entrega (RF-29 a RF-32) ----------
 
 func (a *App) crearPago(w http.ResponseWriter, r *http.Request, u *User) {
 	id, err := pathID(r, "id")
@@ -586,7 +577,6 @@ func (a *App) listarGarantias(w http.ResponseWriter, r *http.Request, u *User) {
 	writeJSON(w, 200, rows)
 }
 
-// RF-31 / RF-32 / RN-02: la orden de salida solo existe con la OT terminada y saldo en cero.
 func (a *App) ordenSalida(w http.ResponseWriter, r *http.Request, u *User) {
 	id, err := pathID(r, "id")
 	if err != nil {
@@ -647,7 +637,6 @@ func (a *App) ordenSalida(w http.ResponseWriter, r *http.Request, u *User) {
 	writeJSON(w, 200, out)
 }
 
-// RN-10: un pago no se edita ni se borra; solo el administrador lo anula, una vez y con un motivo (queda en la bitácora).
 func (a *App) anularPago(w http.ResponseWriter, r *http.Request, u *User) {
 	id, err := pathID(r, "id")
 	if err != nil {
@@ -696,7 +685,6 @@ func (a *App) anularPago(w http.ResponseWriter, r *http.Request, u *User) {
 	writeJSON(w, 200, out)
 }
 
-// RN-09: entrega sin cargo (garantía, cortesía...). Solo el jefe de taller o el administrador, con motivo y auditoría.
 func (a *App) autorizarSinCargo(w http.ResponseWriter, r *http.Request, u *User) {
 	id, err := pathID(r, "id")
 	if err != nil {

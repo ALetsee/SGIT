@@ -27,8 +27,6 @@ type User struct {
 	Exp          int64  `json:"-"`
 }
 
-// ---------- Contraseñas: argon2id (ERS 9.2) ----------
-
 const (
 	argonTime    = 3
 	argonMemory  = 64 * 1024
@@ -47,7 +45,7 @@ func hashPassword(pw string) (string, error) {
 }
 
 func verifyPassword(pw, enc string) bool {
-	parts := strings.Split(enc, "$") // "", argon2id, v=19, m=..,t=..,p=.., salt, hash
+	parts := strings.Split(enc, "$")
 	if len(parts) != 6 || parts[1] != "argon2id" {
 		return false
 	}
@@ -67,8 +65,6 @@ func verifyPassword(pw, enc string) bool {
 	got := argon2.IDKey([]byte(pw), salt, t, m, p, uint32(len(want)))
 	return subtle.ConstantTimeCompare(got, want) == 1
 }
-
-// ---------- JWT HS256 ----------
 
 var b64 = base64.RawURLEncoding
 
@@ -94,7 +90,6 @@ type jwtClaims struct {
 	Exp int64  `json:"exp"`
 }
 
-// parseJWT valida firma y vencimiento y devuelve las reclamaciones del token.
 func (a *App) parseJWT(tok string) (*jwtClaims, error) {
 	parts := strings.Split(tok, ".")
 	if len(parts) != 3 {
@@ -127,9 +122,6 @@ func (a *App) parseJWT(tok string) (*jwtClaims, error) {
 	return &c, nil
 }
 
-// authenticate valida el token y vuelve a leer rol y estado desde la base:
-// un usuario desactivado, con rol cambiado, con la contraseña cambiada o con el token
-// revocado (cierre de sesión) pierde el acceso de inmediato.
 func (a *App) authenticate(r *http.Request) (*User, error) {
 	h := r.Header.Get("Authorization")
 	if !strings.HasPrefix(h, "Bearer ") {
@@ -155,7 +147,6 @@ func (a *App) authenticate(r *http.Request) (*User, error) {
 
 type handlerFunc func(w http.ResponseWriter, r *http.Request, u *User)
 
-// route registra una ruta protegida; si se indican roles, solo esos pueden usarla.
 func (a *App) route(pattern string, h handlerFunc, roles ...string) {
 	a.mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
 		u, err := a.authenticate(r)
@@ -180,8 +171,6 @@ func (a *App) route(pattern string, h handlerFunc, roles ...string) {
 	})
 }
 
-// ---------- Límite de intentos de login ----------
-
 type limiter struct {
 	mu    sync.Mutex
 	fails map[string][]time.Time
@@ -196,7 +185,6 @@ type limite struct {
 	max   int
 }
 
-// podar descarta los intentos fuera de la ventana y devuelve los vigentes (debe llamarse con el cerrojo tomado).
 func (l *limiter) podar(clave string, desde time.Time) []time.Time {
 	kept := l.fails[clave][:0]
 	for _, t := range l.fails[clave] {
@@ -212,14 +200,12 @@ func (l *limiter) podar(clave string, desde time.Time) []time.Time {
 	return kept
 }
 
-// reservar comprueba y registra un intento de forma ATÓMICA: si 20 peticiones llegan a la vez, solo
-// pasan las que caben en el límite. (Antes se contaba al terminar y las peticiones en paralelo lo evadían.)
 func (l *limiter) reservar(ls []limite) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	ahora := time.Now()
 	desde := ahora.Add(-ventana)
-	if len(l.fails) > 20000 { // el mapa no crece sin límite
+	if len(l.fails) > 20000 {
 		for k := range l.fails {
 			l.podar(k, desde)
 		}
@@ -235,7 +221,6 @@ func (l *limiter) reservar(ls []limite) bool {
 	return true
 }
 
-// devolver quita el último intento de una clave (se usa cuando el intento fue exitoso o no se llegó a evaluar).
 func (l *limiter) devolver(clave string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -252,8 +237,6 @@ func (l *limiter) olvidar(clave string) {
 	l.mu.Unlock()
 }
 
-// verificar comprueba una contraseña con argon2id (64 MB por intento) dejando pasar pocas a la vez, para que
-// una ráfaga de inicios de sesión no agote la memoria ni la CPU. Si no hay turno en 3 s, responde «ocupado».
 func (a *App) verificar(pw, hash string) (ok bool, ocupado bool) {
 	select {
 	case a.sem <- struct{}{}:
@@ -264,8 +247,6 @@ func (a *App) verificar(pw, hash string) (ok bool, ocupado bool) {
 	}
 }
 
-// clientIP confía en X-Real-IP solo cuando la petición llega desde el propio servidor
-// (el frontend Flask corre en la misma máquina).
 func clientIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
@@ -284,7 +265,7 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) {
 		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
-	if err := decodeLimit(r, &in, 4096); err != nil { // un inicio de sesión legítimo pesa unos cientos de bytes
+	if err := decodeLimit(r, &in, 4096); err != nil {
 		fail(w, err)
 		return
 	}
@@ -294,8 +275,7 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ip := clientIP(r)
-	// Por correo+IP (5): quien falla desde su equipo no bloquea al dueño de la cuenta que entra desde otro.
-	// Por correo (30) y por IP (30): frenan los ataques repartidos entre muchas direcciones o correos.
+
 	kEI, kE, kI := "ei:"+email+"|"+ip, "e:"+email, "i:"+ip
 	if !a.lim.reservar([]limite{{kEI, 5}, {kE, 30}, {kI, 30}}) {
 		w.Header().Set("Retry-After", "600")
@@ -310,7 +290,7 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) {
 	if found {
 		hash = str(row, "password_hash")
 	}
-	ok, ocupado := a.verificar(in.Password, hash) // se verifica siempre para igualar tiempos
+	ok, ocupado := a.verificar(in.Password, hash)
 	if ocupado {
 		a.lim.devolver(kEI)
 		a.lim.devolver(kE)

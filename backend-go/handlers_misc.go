@@ -8,8 +8,6 @@ import (
 	"time"
 )
 
-// ---------- Herramientas especializadas (RF-24, RF-25) ----------
-
 func (a *App) listarHerramientas(w http.ResponseWriter, r *http.Request, u *User) {
 	rows, err := rowsToMaps(r.Context(), a.db,
 		`SELECT h.id, h.nombre, h.valor_estimado, h.activa,
@@ -140,7 +138,6 @@ func (a *App) devolverHerramienta(w http.ResponseWriter, r *http.Request, u *Use
 	writeJSON(w, 200, out)
 }
 
-// RF-25: herramientas sin devolver al cierre de la OT o del día.
 func (a *App) alertasHerramientas(w http.ResponseWriter, r *http.Request, u *User) {
 	rows, err := rowsToMaps(r.Context(), a.db,
 		`SELECT h.id AS herramienta_id, h.nombre, t.nombre AS prestada_a, p.prestado_en, ot.folio AS ot_folio,
@@ -159,8 +156,6 @@ func (a *App) alertasHerramientas(w http.ResponseWriter, r *http.Request, u *Use
 	}
 	writeJSON(w, 200, rows)
 }
-
-// ---------- Pedidos a proveedor (RF-26) ----------
 
 func (a *App) crearPedido(w http.ResponseWriter, r *http.Request, u *User) {
 	id, err := pathID(r, "id")
@@ -262,8 +257,6 @@ func (a *App) pedidoRecibido(w http.ResponseWriter, r *http.Request, u *User) {
 	writeJSON(w, 200, row)
 }
 
-// ---------- Reportes (RF-33 a RF-38) ----------
-
 func (a *App) reporteResumen(w http.ResponseWriter, r *http.Request, u *User) {
 	hoy := time.Now()
 	desde := hoy.Format("2006-01-02")[:8] + "01"
@@ -284,7 +277,7 @@ func (a *App) reporteResumen(w http.ResponseWriter, r *http.Request, u *User) {
 	err := a.withTx(r.Context(), u, func(tx *sql.Tx) error {
 		ctx := r.Context()
 		var e error
-		// RF-35 y RF-37: facturación y utilidad neta (ingresos menos costo de piezas y mano de obra)
+
 		if out["facturacion_por_tipo"], e = rowsToMaps(ctx, tx,
 			`SELECT CASE WHEN v.tipo='COMBUSTION' THEN 'COMBUSTION' ELSE 'ELECTRICO' END AS clase,
 			        COUNT(DISTINCT ot.id) AS ordenes,
@@ -298,7 +291,7 @@ func (a *App) reporteResumen(w http.ResponseWriter, r *http.Request, u *User) {
 			  GROUP BY 1 ORDER BY 3 DESC`, desde, hasta); e != nil {
 			return e
 		}
-		// RF-34: órdenes terminadas por técnico
+
 		if out["ordenes_por_tecnico"], e = rowsToMaps(ctx, tx,
 			`SELECT t.nombre AS tecnico, COUNT(*) AS ordenes
 			   FROM orden_trabajo ot JOIN usuario t ON t.id=ot.tecnico_id
@@ -306,7 +299,7 @@ func (a *App) reporteResumen(w http.ResponseWriter, r *http.Request, u *User) {
 			  GROUP BY 1 ORDER BY 2 DESC`, desde, hasta); e != nil {
 			return e
 		}
-		// RF-33: horas facturadas contra horas trabajadas
+
 		if out["productividad"], e = rowsToMaps(ctx, tx,
 			`SELECT t.nombre AS tecnico,
 			        COALESCE((SELECT SUM(h.horas) FROM registro_horas h
@@ -318,7 +311,7 @@ func (a *App) reporteResumen(w http.ResponseWriter, r *http.Request, u *User) {
 			   FROM usuario t WHERE t.rol='TECNICO' ORDER BY 1`, desde, hasta); e != nil {
 			return e
 		}
-		// RF-36: refacciones con mayor rotación
+
 		if out["rotacion_refacciones"], e = rowsToMaps(ctx, tx,
 			`SELECT r.nombre, SUM(m.cantidad) AS salidas
 			   FROM movimiento_inventario m JOIN refaccion r ON r.id=m.refaccion_id
@@ -326,7 +319,7 @@ func (a *App) reporteResumen(w http.ResponseWriter, r *http.Request, u *User) {
 			  GROUP BY 1 ORDER BY 2 DESC LIMIT 10`, desde, hasta); e != nil {
 			return e
 		}
-		// RF-38: vehículos que excedieron el tiempo prometido y la razón
+
 		out["retrasos"], e = rowsToMaps(ctx, tx,
 			`SELECT ot.folio, v.placas, ot.prometido_en, COALESCE(ot.entregado_en, now()) AS referencia,
 			        ot.estado, ot.motivo_retraso
@@ -354,8 +347,6 @@ func (a *App) reporteResumen(w http.ResponseWriter, r *http.Request, u *User) {
 	writeJSON(w, 200, out)
 }
 
-// ---------- Auditoría (RF-41) ----------
-
 func (a *App) listarAuditoria(w http.ResponseWriter, r *http.Request, u *User) {
 	limite := 100
 	if v, err := strconv.Atoi(r.URL.Query().Get("limite")); err == nil && v > 0 && v <= 500 {
@@ -370,8 +361,6 @@ func (a *App) listarAuditoria(w http.ResponseWriter, r *http.Request, u *User) {
 	}
 	writeJSON(w, 200, rows)
 }
-
-// ---------- Configuración de márgenes (RF-19) ----------
 
 func (a *App) verConfiguracion(w http.ResponseWriter, r *http.Request, u *User) {
 	rows, err := rowsToMaps(r.Context(), a.db, `SELECT clave, valor FROM configuracion ORDER BY clave`)

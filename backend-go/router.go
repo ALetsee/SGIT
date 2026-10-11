@@ -5,8 +5,6 @@ import (
 	"strings"
 )
 
-// Router mínimo: patrones "MÉTODO /ruta/{parametro}". Se implementa aquí para no
-// depender de la configuración (GODEBUG) del enrutador estándar de cada versión de Go.
 type routeEntry struct {
 	method string
 	segs   []string

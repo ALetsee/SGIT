@@ -6,8 +6,6 @@ import (
 	"strings"
 )
 
-// ---------- Usuarios (RF-08, RF-39) ----------
-
 func (a *App) crearUsuario(w http.ResponseWriter, r *http.Request, u *User) {
 	var in struct {
 		Nombre       string `json:"nombre"`
@@ -122,8 +120,6 @@ func (a *App) actualizarUsuario(w http.ResponseWriter, r *http.Request, u *User)
 	writeJSON(w, 200, row)
 }
 
-// ---------- Clientes (RF-01, RF-07) ----------
-
 func (a *App) crearCliente(w http.ResponseWriter, r *http.Request, u *User) {
 	var in struct {
 		Nombre   string `json:"nombre"`
@@ -174,8 +170,6 @@ func (a *App) listarClientes(w http.ResponseWriter, r *http.Request, u *User) {
 	}
 	writeJSON(w, 200, rows)
 }
-
-// ---------- Vehículos (RF-01, RF-02, RF-28) ----------
 
 func (a *App) crearVehiculo(w http.ResponseWriter, r *http.Request, u *User) {
 	var in struct {
@@ -243,7 +237,7 @@ func (a *App) listarVehiculos(w http.ResponseWriter, r *http.Request, u *User) {
 	q := "%" + strings.TrimSpace(r.URL.Query().Get("q")) + "%"
 	filtro := "v.vin ILIKE $1 OR v.placas ILIKE $1 OR c.nombre ILIKE $1"
 	if u.Rol == RolTec {
-		filtro = "v.vin ILIKE $1 OR v.placas ILIKE $1" // el técnico no busca ni ve a qué cliente pertenece
+		filtro = "v.vin ILIKE $1 OR v.placas ILIKE $1"
 	}
 	rows, err := rowsToMaps(r.Context(), a.db,
 		`SELECT v.id,v.cliente_id,c.nombre AS cliente_nombre,v.vin,v.placas,v.marca,v.modelo,v.anio,v.tipo,
@@ -264,7 +258,6 @@ func (a *App) listarVehiculos(w http.ResponseWriter, r *http.Request, u *User) {
 	writeJSON(w, 200, rows)
 }
 
-// RF-28: historial por placas o VIN.
 func (a *App) historialVehiculo(w http.ResponseWriter, r *http.Request, u *User) {
 	id, err := pathID(r, "id")
 	if err != nil {

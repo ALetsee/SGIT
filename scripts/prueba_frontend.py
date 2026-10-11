@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Prueba del frontend (Flask) contra la API real: pantallas por rol y flujo completo.
 
 Uso:  SGIT_ADMIN_EMAIL=... SGIT_ADMIN_PASSWORD=... python3 prueba_frontend.py
@@ -15,7 +14,7 @@ RUTA = os.environ.get("SGIT_FRONTEND_DIR", os.path.join(os.path.dirname(os.path.
 sys.path.insert(0, RUTA)
 os.environ.setdefault("FLASK_SECRET", "clave-solo-para-pruebas")
 
-import app as sgit  # noqa: E402
+import app as sgit
 
 ADMIN = os.environ.get("SGIT_ADMIN_EMAIL", "")
 ADMIN_PW = os.environ.get("SGIT_ADMIN_PASSWORD", "")
@@ -213,7 +212,6 @@ anota(len(re.findall(r'<img src="/fotos/', r)) == 4, "RF-07: la hoja incluye las
 tb = html(jefe.get("/tablero"))
 anota("PRUEBA Tecnico HV" in tb and "En rampa" in tb and "En espera" in tb and "Listos para entrega" in tb, "RF-10: el tablero muestra al técnico con sus tres grupos", tb)
 anota("Sin asignar" in tb, "RF-10: el tablero incluye la columna de órdenes sin asignar")
-# La prueba crea su propia orden abierta, asignada al técnico, para no depender de datos de otras corridas.
 r2 = rec.post("/ordenes/nueva", {"vehiculo_id": veh, "falla_reportada": "Orden abierta para el tablero", "km_ingreso": "16000", "carga_bateria_pct": "55"})
 m2 = re.search(r"/ordenes/([0-9a-f-]{36})", r2.request.path)
 ot_tab = m2.group(1) if m2 else ""
@@ -281,7 +279,7 @@ anota("camera=(self)" in cab.headers.get("Permissions-Policy", "") and "frame-an
 
 print("== Unidades de la cotización (horas, piezas, trabajos) ==")
 oj = html(jefe.get(f"/ordenes/{ot}"))
-of = html(jefe.get(f"/ordenes/{ot_tab}"))   # el formulario de partidas solo existe en una orden abierta
+of = html(jefe.get(f"/ordenes/{ot_tab}"))
 anota("Horas de mano de obra" in of and "Costo por hora" in of and "Cantidad (horas o piezas)" not in of, "el formulario de partidas no mezcla horas con piezas", of[:200])
 anota('data-cant="Piezas"' in of and 'data-cant="Trabajos"' in of and 'data-cant="Servicios"' in of, "cada concepto trae su propia etiqueta (piezas, trabajos, servicios)")
 anota(re.search(r'>3 h<', oj) is not None and re.search(r'>2 pzas<', oj) is not None, "la cotización muestra «3 h» para la mano de obra y «2 pzas» para la pieza")

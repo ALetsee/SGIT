@@ -1,8 +1,5 @@
--- Migracion 005: version 4 -> 5 (correcciones de la prueba de penetracion)
---   RN-07  flujo valido de estados; una orden entregada no se reabre
---   RN-08  una orden entregada no cambia sus partidas, autorizaciones ni pagos
---   RN-09  no se entrega sin cobrar un trabajo autorizado, salvo entrega sin cargo autorizada con motivo
---   RN-10  pagos que no exceden lo que se debe; los pagos no se editan ni se borran, se anulan con motivo
+
+
 BEGIN;
 ALTER TABLE orden_trabajo
   ADD COLUMN sin_cargo_motivo text,
@@ -47,7 +44,6 @@ BEGIN
   UPDATE orden_trabajo SET saldo = GREATEST(v_total - v_pagado, 0) WHERE id = p_ot_id;
 END $$;
 
--- RN-07: flujo valido de estados de la orden. Una orden ENTREGADA ya no se reabre.
 CREATE FUNCTION fn_validar_transicion_estado() RETURNS trigger AS $$
 BEGIN
   IF OLD.estado IS DISTINCT FROM NEW.estado THEN
@@ -67,7 +63,6 @@ END $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_transicion_estado BEFORE UPDATE ON orden_trabajo
   FOR EACH ROW EXECUTE FUNCTION fn_validar_transicion_estado();
 
--- RN-08: una orden ENTREGADA es historia cerrada: sus partidas y autorizaciones ya no cambian
 CREATE FUNCTION fn_orden_entregada_partida() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
 DECLARE v_estado estado_ot; v_folio integer;
@@ -82,7 +77,6 @@ END $$;
 CREATE TRIGGER trg_orden_entregada_partida BEFORE INSERT OR UPDATE OR DELETE ON partida
   FOR EACH ROW EXECUTE FUNCTION fn_orden_entregada_partida();
 
--- RN-08 y RN-10: un pago nuevo no puede exceder lo que se debe ni registrarse en una orden entregada
 CREATE FUNCTION fn_pago_validar() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
 DECLARE v_estado estado_ot; v_folio integer; v_saldo numeric; v_cot numeric; v_pag numeric; v_lim numeric; v_max numeric;
@@ -114,7 +108,6 @@ END $$;
 CREATE TRIGGER trg_pago_validar BEFORE INSERT ON pago
   FOR EACH ROW EXECUTE FUNCTION fn_pago_validar();
 
--- RN-10: los pagos no se editan ni se borran: solo se anulan una vez, con motivo, y nunca en una orden entregada
 CREATE FUNCTION fn_pago_inmutable() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
 DECLARE v_estado estado_ot;

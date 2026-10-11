@@ -8,7 +8,6 @@ import (
 	"net/http"
 )
 
-// config devuelve un parámetro numérico de la tabla configuracion (margen e impuesto por defecto).
 func (a *App) config(ctx context.Context, q queryer, clave string) (string, error) {
 	row, err := oneRow(ctx, q, `SELECT valor FROM configuracion WHERE clave=$1`, clave)
 	if err != nil {
@@ -20,9 +19,6 @@ func (a *App) config(ctx context.Context, q queryer, clave string) (string, erro
 const colsPublicas = `p.id, p.cotizacion_id, p.concepto, p.descripcion, p.refaccion_id, p.cantidad, p.precio_cliente,
 	p.autorizada, p.medio_autorizacion, p.autorizado_en`
 
-// ---------- Cotización y partidas (RF-16 a RF-20) ----------
-
-// RF-40: recepción y técnicos usan la vista sin costo ni margen; jefe y admin la tabla completa (RLS).
 func (a *App) partidasDeOt(ctx context.Context, tx *sql.Tx, u *User, otID string) ([]map[string]any, map[string]any, error) {
 	tabla, cols := "partida_cliente", colsPublicas
 	if isPrivileged(u) {
@@ -65,7 +61,6 @@ func (a *App) verCotizacion(w http.ResponseWriter, r *http.Request, u *User) {
 	writeJSON(w, 200, out)
 }
 
-// RF-16: partidas manuales (mano de obra, trabajos externos, servicios eléctricos, reconstruidas).
 func (a *App) crearPartida(w http.ResponseWriter, r *http.Request, u *User) {
 	id, err := pathID(r, "id")
 	if err != nil {
@@ -151,7 +146,7 @@ func (a *App) crearPartida(w http.ResponseWriter, r *http.Request, u *User) {
 		if e = snapshot(r.Context(), tx, u, id, "Partida agregada: "+desc+" ("+in.Concepto+")"); e != nil {
 			return e
 		}
-		// RF-41: toda partida registra con qué costo, margen e impuesto se calculó el precio
+
 		return audit(r.Context(), tx, u, "CREA_PARTIDA", "partida", str(out, "id"), map[string]any{
 			"ot": id, "concepto": in.Concepto, "cantidad": out["cantidad"], "costo": out["costo"],
 			"margen_pct": out["margen_pct"], "impuesto_pct": out["impuesto_pct"], "precio_cliente": out["precio_cliente"],

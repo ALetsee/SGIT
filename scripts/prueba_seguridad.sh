@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Verificacion de controles de seguridad del SGIT instalado (autoevaluacion; ver docs/SEGURIDAD_ASVS.md).
-# No necesita credenciales. Ejecutar como root: revisa permisos de archivos y sockets.
-set -u   # sin pipefail: "grep -q" cierra el pipe al encontrar y haria fallar el pipeline aunque coincida
+
+set -u
 ENV_FILE="${SGIT_ENV:-/etc/sgit/sgit.env}"
 [[ -r "$ENV_FILE" ]] && { set -a; . "$ENV_FILE"; set +a; }
 HTTPS="${SGIT_HTTPS:-https://127.0.0.1}"
@@ -54,7 +53,7 @@ chk "cinco intentos de contraseña EN PARALELO se cuentan igual que en serie (RN
   'C="sgitparalelo-$RANDOM@prueba.local"; for i in 1 2 3 4 5 6 7 8; do curl -s -o /dev/null -w "%{http_code}\n" -X POST http://127.0.0.1:8081/auth/login -H "Content-Type: application/json" -d "{\"email\":\"$C\",\"password\":\"x\"}" & done | sort | uniq -c | grep -q "429" '
 
 echo "== Exposición de servicios =="
-solo_local() { # puerto
+solo_local() {
   local dir; dir="$(ss -ltnH "sport = :$1" 2>/dev/null | awk '{print $4}')"
   [[ -z "$dir" ]] && return 0
   ! echo "$dir" | grep -qE '^(0\.0\.0\.0|\*|\[::\]):'

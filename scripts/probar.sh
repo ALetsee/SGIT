@@ -1,9 +1,5 @@
 #!/usr/bin/env bash
-# Pruebas del SGIT instalado.
-#   sudo sgit-probar              reglas de negocio, seguridad y migraciones (seguro, no deja datos)
-#   sudo sgit-probar --respaldo   ademas, recuperacion a un momento exacto (copia base cifrada + WAL)
-#   sudo sgit-probar --completo   todo lo anterior y ademas API, pantallas y concurrencia
-#                                 (crea registros con el prefijo PRUEBA)
+
 set -uo pipefail
 BASE=/opt/sgit
 MODO="${1:-}"
@@ -42,7 +38,7 @@ if [[ "$MODO" == "--completo" ]]; then
   echo; echo "=== Concurrencia (varios tecnicos a la vez) ==="
   SGIT_API="$SGIT_API" SGIT_ADMIN_EMAIL="$EMAIL" SGIT_ADMIN_PASSWORD="$PW" \
     python3 "$BASE/scripts/prueba_concurrencia.py" || RES=1
-  # Los usuarios de prueba tienen una contrasena conocida: se desactivan siempre al terminar.
+
   N="$(runuser -u postgres -- psql -X -q -d "${DB_NAME:-taller_db}" -tAc "WITH x AS (UPDATE usuario SET activo=false WHERE email LIKE '%@prueba.test' AND activo RETURNING 1) SELECT count(*) FROM x")"
   echo; echo "Usuarios de prueba desactivados: ${N:-0} (sus registros quedan en la bitacora, que es inmutable)."
 fi
