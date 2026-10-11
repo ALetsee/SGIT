@@ -1,6 +1,6 @@
 
 
-const VERSION = 'sgit-1.2.0';
+const VERSION = 'sgit-1.2.1';
 const PRECARGA = ['/offline', '/static/icon-192.png', '/static/icon.svg'];
 
 self.addEventListener('install', (e) => {

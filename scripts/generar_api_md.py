@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Genera docs/API.md leyendo las rutas reales de backend-go/main.go (la documentacion no puede desfasarse del codigo)."""
 import os, re, sys
 raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

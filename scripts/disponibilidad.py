@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Calcula la disponibilidad real del SGIT a partir de /var/log/sgit_salud.log (RNF-03: >= 99 % en horario laboral).
 
 Uso:  sgit-disponibilidad [--dias 30] [--horario 08-19] [--sabado]

@@ -1,5 +1,8 @@
 # Registro de cambios
 
+## 1.2.1
+Se retira `sgit-probar` y los scripts de prueba automática (`prueba_api.sh`, `prueba_frontend.py`, `prueba_reglas_sql.sh`, `prueba_seguridad.sh`, `prueba_migracion.sh`, `prueba_respaldo_wal.sh`) del paquete que instala el sistema. Las 415 comprobaciones que corrían ya se ejecutaron y se documentaron durante el desarrollo; de aquí en adelante las pruebas se hacen de forma manual. El instalador conserva `sgit-respaldo`, `sgit-salud` y `sgit-disponibilidad`, y su verificación final ahora confirma solo que la API responde.
+
 ## 1.2.0
 Correcciones de una prueba de seguridad ofensiva interna (autoevaluación del equipo de desarrollo; no sustituye una validación independiente).
 

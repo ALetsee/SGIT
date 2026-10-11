@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Carga datos de demostracion en el SGIT (personal, clientes, inventario y ordenes en distintos estados).
 
 Uso (en el servidor, despues de instalar):

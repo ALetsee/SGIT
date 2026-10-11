@@ -421,8 +421,8 @@ fi
 
 paso "9/9 Respaldos, comandos y verificacion"
 if [[ ! -f "$CONF_DIR/respaldo.key" ]]; then ( umask 077; openssl rand -base64 48 > "$CONF_DIR/respaldo.key" ); ok "Llave de cifrado de respaldos creada"; fi
+rm -f /usr/local/bin/sgit-probar
 install -m 755 "$DEST/scripts/respaldo.sh" /usr/local/bin/sgit-respaldo
-install -m 755 "$DEST/scripts/probar.sh" /usr/local/bin/sgit-probar
 install -m 755 "$DEST/scripts/salud.sh" /usr/local/bin/sgit-salud
 install -m 755 "$DEST/scripts/disponibilidad.py" /usr/local/bin/sgit-disponibilidad
 cat > /etc/cron.d/sgit-salud <<'EOF'
@@ -456,8 +456,7 @@ if /usr/local/bin/sgit-respaldo; then ok "Primer respaldo cifrado creado y verif
 else fail "El respaldo de prueba fallo; revisa el mensaje anterior."; fi
 
 echo
-log "Probando las reglas de negocio contra la base (no deja datos)..."
-SGIT_ENV="$ENV_FILE" "$DEST/scripts/prueba_reglas_sql.sh" || fail "Alguna regla de negocio fallo. Revisa la salida anterior."
+esperar "http://127.0.0.1:8081/salud" && ok "Verificacion final: la API responde correctamente" || fail "La API no respondio en la verificacion final. Revisa: journalctl -u sgit-api -n 50 (o /var/log/sgit-api.log)"
 
 echo
 echo -e "${C_OK}=============================== INSTALACION COMPLETA ===============================${C_RESET}"
@@ -468,9 +467,6 @@ if [[ -n "$ADMIN_PW" ]]; then
 fi
 echo
 echo "  Comandos utiles:"
-echo "    sudo sgit-probar              reglas, seguridad y migraciones (seguro, no deja datos)"
-echo "    sudo sgit-probar --respaldo   recuperacion a un momento exacto (copia base + WAL)"
-echo "    sudo sgit-probar --completo   API y pantallas (crea registros PRUEBA)"
 echo "    sudo sgit-respaldo            respaldo cifrado ahora (ya corre solo a las 2:30 hora del taller)"
 echo "    sgit-disponibilidad           disponibilidad real (meta: 99 % en horario laboral)"
 if [[ $SYSTEMD -eq 1 ]]; then

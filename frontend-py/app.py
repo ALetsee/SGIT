@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """SGIT - Frontend web (Python / Flask).
 
 El navegador solo habla con este servidor. Este servidor habla con la API en Go

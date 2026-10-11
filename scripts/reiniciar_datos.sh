@@ -46,4 +46,4 @@ find "$FOTOS_DIR" -mindepth 1 -delete
 
 echo
 echo "Listo. Datos reiniciados; los folios empiezan otra vez en 1."
-echo "Ya puedes volver a correr:  python3 cargar_demo.py   o   sudo sgit-probar --completo"
+echo "Ya puedes volver a correr: python3 cargar_demo.py"
