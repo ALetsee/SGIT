@@ -1,4 +1,3 @@
-
 document.addEventListener('click', function (e) {
   var p = e.target.closest('[data-print]');
   if (p) window.print();

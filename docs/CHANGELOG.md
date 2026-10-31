@@ -1,5 +1,26 @@
 # Registro de cambios
 
+## 1.3.0
+Rediseño visual completo del frontend.
+
+**Tipografía:** Space Grotesk (títulos y cifras) y Manrope (cuerpo y formularios), ambas incluidas como archivos locales woff2 sin depender de internet ni de Google Fonts. Licencia OFL.
+
+**Modo claro y oscuro:** botón de cambio en la barra de navegación (y en el login); la preferencia se guarda en `localStorage` y persiste entre páginas y entre sesiones. Si el usuario no ha elegido, se usa la preferencia del sistema operativo. El script de detección corre como archivo externo (`tema.js`) antes del primer render, compatible con la CSP (`script-src 'self'`).
+
+**Paleta de color:**
+- Ámbar: acciones principales (botones de autorizar, guardar, entrar).
+- Amarillo: exclusivamente alto voltaje / peligro (como en la señalización real).
+- Rojo: alertas, retrasos y acciones destructivas.
+- Verde: estados completados (autorizada, lista, pagada).
+- Acero/neutro: todo lo demás.
+
+**Login rediseñado:** pantalla de dos columnas (marca a la izquierda, formulario a la derecha) con el emblema del sistema, tres puntos sobre sus funciones y la franja de peligro. En celular se reduce a una franja con la marca y el formulario debajo.
+
+**Interfaz adaptada:** campos y botones de 48 px para uso con dedo en tableta. Navegación que pasa a segunda fila entre 700 y 1150 px y se desliza en celular (<600 px) con degradado de aviso. Todos los contrastes cumplen WCAG AA (4.5:1 mínimo).
+
+**Archivos nuevos:** `static/tema.js`, `static/fonts/` (4 archivos: 2 fuentes + 2 licencias).
+**Archivos cambiados:** `style.css`, `app.js`, `sw.js`, `manifest.webmanifest`, `base.html`, `login.html`.
+
 ## 1.2.1
 Se retira `sgit-probar` y los scripts de prueba automática (`prueba_api.sh`, `prueba_frontend.py`, `prueba_reglas_sql.sh`, `prueba_seguridad.sh`, `prueba_migracion.sh`, `prueba_respaldo_wal.sh`) del paquete que instala el sistema. Las 415 comprobaciones que corrían ya se ejecutaron y se documentaron durante el desarrollo; de aquí en adelante las pruebas se hacen de forma manual. El instalador conserva `sgit-respaldo`, `sgit-salud` y `sgit-disponibilidad`, y su verificación final ahora confirma solo que la API responde.
 

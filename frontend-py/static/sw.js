@@ -1,7 +1,7 @@
 
 
-const VERSION = 'sgit-1.2.1';
-const PRECARGA = ['/offline', '/static/icon-192.png', '/static/icon.svg'];
+const VERSION = 'sgit-1.3.0';
+const PRECARGA = ['/offline', '/static/icon-192.png', '/static/icon.svg', '/static/tema.js', '/static/fonts/space-grotesk-latin-wght-normal.woff2', '/static/fonts/manrope-latin-wght-normal.woff2'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(VERSION).then((c) => c.addAll(PRECARGA)).then(() => self.skipWaiting()));

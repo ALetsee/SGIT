@@ -10,9 +10,17 @@ Hay cuatro roles: Recepción, Técnico, Jefe de taller y Administrador. Cada sec
 
 Inicio de sesión
 
-En la pantalla de entrada se escribe el correo y la contraseña. Si alguno de los dos está mal, el sistema responde que las credenciales son inválidas, sin decir cuál de los dos falló. Después de cinco intentos fallidos con el mismo correo, el acceso se bloquea diez minutos.
+La pantalla de inicio se divide en dos partes: a la izquierda un panel con la marca del taller y una descripción del sistema, y a la derecha el formulario de acceso. En celular, el panel de la izquierda se reduce a una franja con la marca y el formulario queda debajo.
+
+Se escribe el correo y la contraseña. Si alguno de los dos está mal, el sistema responde que las credenciales son inválidas, sin decir cuál de los dos falló. Después de cinco intentos fallidos con el mismo correo, el acceso se bloquea diez minutos.
 
 Una vez dentro, el nombre de la persona aparece arriba a la derecha. Ahí mismo está el enlace a Mi cuenta y el botón Cerrar sesión.
+
+Tema claro y oscuro
+
+El sistema tiene dos temas visuales: claro (fondo gris claro) y oscuro (fondo casi negro). El botón para cambiar entre ellos está en la esquina superior derecha de todas las pantallas, incluyendo la de inicio de sesión. Es un ícono de luna (para pasar a oscuro) o de sol (para pasar a claro).
+
+La elección se guarda en el navegador. Al volver a entrar, al cambiar de pestaña o al cerrar sesión, el tema se mantiene en el que se eligió. Si nunca se ha tocado el botón, el sistema usa la preferencia del sistema operativo del dispositivo.
 
 Mi cuenta
 
