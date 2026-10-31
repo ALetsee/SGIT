@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"net/http"
 	"strings"
+	"time"
 )
 
 func (a *App) crearUsuario(w http.ResponseWriter, r *http.Request, u *User) {
@@ -135,6 +136,10 @@ func (a *App) crearCliente(w http.ResponseWriter, r *http.Request, u *User) {
 		fail(w, err)
 		return
 	}
+	if len([]rune(nombre)) < 2 {
+		fail(w, httpErr(400, "El nombre del cliente debe tener al menos 2 caracteres."))
+		return
+	}
 	tel, err := optional(in.Telefono, "telefono", 40)
 	if err != nil {
 		fail(w, err)
@@ -209,6 +214,15 @@ func (a *App) crearVehiculo(w http.ResponseWriter, r *http.Request, u *User) {
 	modelo, err := required(in.Modelo, "modelo", 60)
 	if err != nil {
 		fail(w, err)
+		return
+	}
+	if in.Anio == nil {
+		fail(w, httpErr(400, "El año del vehículo es obligatorio."))
+		return
+	}
+	anioActual := time.Now().Year()
+	if *in.Anio < 1950 || *in.Anio > anioActual+2 {
+		fail(w, httpErr(400, "El año debe estar entre 1950 y %d.", anioActual+2))
 		return
 	}
 	if err := inSet(in.Tipo, setTipoMotor, "tipo"); err != nil {

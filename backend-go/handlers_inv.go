@@ -542,6 +542,14 @@ func (a *App) crearGarantia(w http.ResponseWriter, r *http.Request, u *User) {
 		fail(w, httpErr(400, "Indica los días o los kilómetros de la garantía."))
 		return
 	}
+	if in.Dias != nil && *in.Dias < 1 {
+		fail(w, httpErr(400, "Los días de garantía deben ser al menos 1."))
+		return
+	}
+	if in.Kilometros != nil && *in.Kilometros < 1 {
+		fail(w, httpErr(400, "Los kilómetros de garantía deben ser al menos 1."))
+		return
+	}
 	var row map[string]any
 	err = a.withTx(r.Context(), u, func(tx *sql.Tx) error {
 		var e error

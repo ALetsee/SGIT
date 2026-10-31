@@ -1,5 +1,24 @@
 # Registro de cambios
 
+## 1.4.0
+Correcciones de la auditoria de validacion (12 hallazgos).
+
+**Nuevas funcionalidades**
+- Estado ANULADA para ordenes canceladas: el jefe de taller o el administrador pueden anular una orden desde cualquier estado excepto ENTREGADO, indicando un motivo de al menos 10 caracteres. Una orden anulada no se reabre. Las ordenes anuladas no cuentan en los indicadores del Resumen.
+- Cambio de vehiculo en una orden: si recepcion se equivoco de vehiculo, se puede corregir mientras la orden esta en Recepcion o Diagnostico sin borrar la orden ni perder sus partidas.
+
+**Validaciones corregidas**
+- H-01: el ano del vehiculo es obligatorio y se valida entre 1950 y el ano actual + 2; antes aceptaba null o valores fuera de rango con un error criptico.
+- H-03: ya no se puede borrar una orden que tenga pagos activos. La FK de la tabla pago cambio de CASCADE a RESTRICT.
+- H-04: el costo de mano de obra, trabajo externo y servicio electrico ya no acepta $0; antes permitia crear trabajo autorizado sin cobro, evadiendo RN-09.
+- H-05: las garantias requieren al menos 1 dia o 1 kilometro; antes aceptaban 0.
+- H-08: el nombre del cliente requiere al menos 2 caracteres.
+- H-10: las placas del vehiculo ahora son unicas en la base de datos; antes se podian duplicar.
+- H-11: ya no se pueden registrar horas de trabajo en una orden terminada, entregada o anulada.
+- H-12: la inspeccion ya no se puede modificar despues de la entrega o la anulacion.
+
+**Esquema:** version 5 a 6 (`006_v6.sql`). Requiere migrar antes de iniciar la API.
+
 ## 1.3.0
 Rediseño visual completo del frontend.
 

@@ -157,8 +157,16 @@ func (a *App) eliminarOt(w http.ResponseWriter, r *http.Request, u *User) {
 		if e != nil {
 			return e
 		}
-		if str(row, "estado") == "ENTREGADO" {
+		est := str(row, "estado")
+		if est == "ENTREGADO" {
 			return httpErr(409, "No se puede borrar una orden ya entregada.")
+		}
+		pCnt, e := oneRow(r.Context(), tx, `SELECT count(*) AS n FROM pago WHERE ot_id=$1 AND anulado_en IS NULL`, id)
+		if e != nil {
+			return e
+		}
+		if n, _ := pCnt["n"].(int64); n > 0 {
+			return httpErr(409, "No se puede borrar una orden con pagos activos. Anula los pagos primero.")
 		}
 		if e = audit(r.Context(), tx, u, "BORRA_OT", "orden_trabajo", id, map[string]any{"folio": row["folio"], "estado": row["estado"]}); e != nil {
 			return e
@@ -437,6 +445,15 @@ func (a *App) guardarInspeccion(w http.ResponseWriter, r *http.Request, u *User)
 		fail(w, err)
 		return
 	}
+	otEst2, err := oneRow(r.Context(), a.db, `SELECT estado::text AS estado FROM orden_trabajo WHERE id=$1`, id)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	if e := str(otEst2, "estado"); e == "ENTREGADO" || e == "ANULADA" {
+		fail(w, httpErr(409, "La orden está %s; la inspección ya no se puede modificar.", e))
+		return
+	}
 	row, err := oneRow(r.Context(), a.db,
 		`INSERT INTO inspeccion(ot_id,descripcion,pertenencias,creado_por) VALUES ($1,$2,$3,$4)
 		 ON CONFLICT (ot_id) DO UPDATE SET descripcion=EXCLUDED.descripcion, pertenencias=EXCLUDED.pertenencias
@@ -578,6 +595,15 @@ func (a *App) registrarHoras(w http.ResponseWriter, r *http.Request, u *User) {
 		fail(w, err)
 		return
 	}
+	otEst, err := oneRow(r.Context(), a.db, `SELECT estado::text AS estado FROM orden_trabajo WHERE id=$1`, id)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	if e := str(otEst, "estado"); e == "TERMINADA" || e == "ENTREGADO" || e == "ANULADA" {
+		fail(w, httpErr(409, "La orden está %s; no se pueden registrar más horas.", e))
+		return
+	}
 	row, err := oneRow(r.Context(), a.db,
 		`INSERT INTO registro_horas(ot_id,tecnico_id,horas,nota) VALUES ($1,$2,$3::numeric,$4)
 		 RETURNING id, ot_id, tecnico_id, horas, nota, creado_en`, id, tec, horas, nota)
@@ -607,4 +633,102 @@ func (a *App) listarHoras(w http.ResponseWriter, r *http.Request, u *User) {
 		total += f
 	}
 	writeJSON(w, 200, map[string]any{"registros": rows, "total_horas": total})
+}
+
+func (a *App) cambiarVehiculo(w http.ResponseWriter, r *http.Request, u *User) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	var in struct {
+		VehiculoID string `json:"vehiculo_id"`
+	}
+	if err := decode(r, &in); err != nil {
+		fail(w, err)
+		return
+	}
+	if !validUUID(in.VehiculoID) {
+		fail(w, httpErr(400, "Elige un vehículo válido."))
+		return
+	}
+	var out map[string]any
+	err = a.withTx(r.Context(), u, func(tx *sql.Tx) error {
+		cur, e := oneRow(r.Context(), tx, `SELECT estado::text AS estado, vehiculo_id FROM orden_trabajo WHERE id=$1 FOR UPDATE`, id)
+		if e != nil {
+			return e
+		}
+		est := str(cur, "estado")
+		if est != "RECEPCION" && est != "DIAGNOSTICO" {
+			return httpErr(409, "Solo se puede corregir el vehículo mientras la orden está en Recepción o Diagnóstico (estado actual: %s).", est)
+		}
+		if _, e = oneRow(r.Context(), tx, `SELECT 1 FROM vehiculo WHERE id=$1`, in.VehiculoID); e != nil {
+			return httpErr(400, "El vehículo indicado no existe.")
+		}
+		if _, e = tx.ExecContext(r.Context(), `UPDATE orden_trabajo SET vehiculo_id=$2 WHERE id=$1`, id, in.VehiculoID); e != nil {
+			return e
+		}
+		if e = audit(r.Context(), tx, u, "CAMBIA_VEHICULO_OT", "orden_trabajo", id,
+			map[string]any{"anterior": str(cur, "vehiculo_id"), "nuevo": in.VehiculoID}); e != nil {
+			return e
+		}
+		out, e = a.otPorID(r, tx, id)
+		return e
+	})
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, 200, out)
+}
+
+func (a *App) anularOt(w http.ResponseWriter, r *http.Request, u *User) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	var in struct {
+		Motivo string `json:"motivo"`
+	}
+	if err := decode(r, &in); err != nil {
+		fail(w, err)
+		return
+	}
+	motivo, err := required(in.Motivo, "motivo", 500)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	if len([]rune(motivo)) < 10 {
+		fail(w, httpErr(400, "El motivo de la anulación debe tener al menos 10 caracteres."))
+		return
+	}
+	var out map[string]any
+	err = a.withTx(r.Context(), u, func(tx *sql.Tx) error {
+		cur, e := oneRow(r.Context(), tx, `SELECT estado::text AS estado, folio FROM orden_trabajo WHERE id=$1 FOR UPDATE`, id)
+		if e != nil {
+			return e
+		}
+		if str(cur, "estado") == "ENTREGADO" {
+			return httpErr(409, "La orden ya fue entregada y no se puede anular.")
+		}
+		if str(cur, "estado") == "ANULADA" {
+			return httpErr(409, "La orden ya está anulada.")
+		}
+		if _, e = tx.ExecContext(r.Context(), `UPDATE orden_trabajo SET estado='ANULADA'::estado_ot WHERE id=$1`, id); e != nil {
+			return e
+		}
+		if e = audit(r.Context(), tx, u, "ANULA_OT", "orden_trabajo", id,
+			map[string]any{"folio": cur["folio"], "estado_anterior": str(cur, "estado"), "motivo": motivo}); e != nil {
+			return e
+		}
+		out, e = a.otPorID(r, tx, id)
+		return e
+	})
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, 200, out)
 }

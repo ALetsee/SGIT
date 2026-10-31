@@ -4,7 +4,7 @@ BEGIN;
 
 CREATE TYPE tipo_motor           AS ENUM ('COMBUSTION','EV','PHEV','HEV');
 CREATE TYPE tipo_transmision     AS ENUM ('MANUAL','AUTOMATICA','CVT');
-CREATE TYPE estado_ot            AS ENUM ('RECEPCION','DIAGNOSTICO','ESPERA_REFACCION','REPARACION','PRUEBAS_RUTA','TERMINADA','ENTREGADO');
+CREATE TYPE estado_ot            AS ENUM ('RECEPCION','DIAGNOSTICO','ESPERA_REFACCION','REPARACION','PRUEBAS_RUTA','TERMINADA','ENTREGADO','ANULADA');
 CREATE TYPE rol_usuario          AS ENUM ('RECEPCION','TECNICO','JEFE_TALLER','ADMIN');
 CREATE TYPE especialidad_tecnico AS ENUM ('MECANICO_TRADICIONAL','CERTIFICADO_ALTA_TENSION','DIAGNOSTICO_ELECTRONICO','MECANICA_PESADA');
 CREATE TYPE concepto_partida     AS ENUM ('MANO_OBRA','REFACCION_NUEVA','REFACCION_RECONSTRUIDA','TRABAJO_EXTERNO','SERVICIO_ELECTRICO');
@@ -53,7 +53,7 @@ CREATE TABLE vehiculo (
   id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   cliente_id         uuid NOT NULL REFERENCES cliente(id) ON DELETE RESTRICT,
   vin                text UNIQUE NOT NULL CHECK (char_length(vin) BETWEEN 11 AND 17),
-  placas             text NOT NULL,
+  placas             text UNIQUE NOT NULL,
   marca              text NOT NULL,
   modelo             text NOT NULL,
   anio               integer CHECK (anio BETWEEN 1950 AND 2100),
@@ -209,15 +209,15 @@ CREATE TABLE garantia (
   id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   ot_id             uuid NOT NULL REFERENCES orden_trabajo(id),
   tipo              tipo_garantia NOT NULL,
-  dias              integer CHECK (dias >= 0),
-  kilometros        integer CHECK (kilometros >= 0),
+  dias              integer CHECK (dias IS NULL OR dias >= 1),
+  kilometros        integer CHECK (kilometros IS NULL OR kilometros >= 1),
   fecha_entrega     timestamptz NOT NULL DEFAULT now(),
   fecha_vencimiento timestamptz
 );
 
 CREATE TABLE pago (
   id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  ot_id      uuid NOT NULL REFERENCES orden_trabajo(id),
+  ot_id      uuid NOT NULL REFERENCES orden_trabajo(id) ON DELETE RESTRICT,
   monto      numeric(12,2) NOT NULL CHECK (monto > 0),
   metodo     metodo_pago NOT NULL,
   tipo       tipo_pago NOT NULL,
@@ -472,6 +472,15 @@ GRANT EXECUTE ON FUNCTION fn_snapshot_cotizacion(uuid,uuid,text) TO app_taller;
 CREATE FUNCTION fn_validar_transicion_estado() RETURNS trigger AS $$
 BEGIN
   IF OLD.estado IS DISTINCT FROM NEW.estado THEN
+    IF NEW.estado = 'ANULADA' THEN
+      IF OLD.estado = 'ENTREGADO' THEN
+        RAISE EXCEPTION 'RN-07: la OT % ya fue entregada y no se puede anular.', NEW.folio;
+      END IF;
+      RETURN NEW;
+    END IF;
+    IF OLD.estado = 'ANULADA' THEN
+      RAISE EXCEPTION 'RN-07: la OT % está anulada y no se puede reabrir.', NEW.folio;
+    END IF;
     IF NOT (
       (OLD.estado = 'RECEPCION'        AND NEW.estado IN ('DIAGNOSTICO','ESPERA_REFACCION')) OR
       (OLD.estado = 'DIAGNOSTICO'      AND NEW.estado IN ('ESPERA_REFACCION','REPARACION')) OR

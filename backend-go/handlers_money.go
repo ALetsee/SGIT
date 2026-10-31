@@ -97,7 +97,11 @@ func (a *App) crearPartida(w http.ResponseWriter, r *http.Request, u *User) {
 		fail(w, err)
 		return
 	}
-	costo, err := numStr(in.Costo, "costo", 0, 100000000)
+	costoMin := 0.0
+	if in.Concepto == "MANO_OBRA" || in.Concepto == "TRABAJO_EXTERNO" || in.Concepto == "SERVICIO_ELECTRICO" {
+		costoMin = 0.01
+	}
+	costo, err := numStr(in.Costo, "costo", costoMin, 100000000)
 	if err != nil {
 		fail(w, err)
 		return

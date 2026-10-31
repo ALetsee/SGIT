@@ -16,7 +16,7 @@ import (
 	_ "github.com/lib/pq"
 )
 
-const version = "1.3.0"
+const version = "1.4.0"
 
 type Config struct {
 	DBURL     string
@@ -208,6 +208,8 @@ func (a *App) routes() {
 	R("PATCH /ordenes-trabajo/{id}/asignar-tecnico", a.asignarTecnico, RolJefe, RolAdmin)
 	R("PATCH /ordenes-trabajo/{id}/estado", a.cambiarEstado, RolRecep, RolTec, RolJefe, RolAdmin)
 	R("PATCH /ordenes-trabajo/{id}/retraso", a.registrarRetraso, RolJefe, RolAdmin)
+	R("PATCH /ordenes-trabajo/{id}/vehiculo", a.cambiarVehiculo, RolRecep, RolJefe, RolAdmin)
+	R("POST /ordenes-trabajo/{id}/anular", a.anularOt, RolJefe, RolAdmin)
 	R("GET /ordenes-trabajo/{id}/checklist-hv", a.obtenerChecklist)
 	R("PUT /ordenes-trabajo/{id}/checklist-hv", a.firmarChecklist, RolTec)
 	R("GET /ordenes-trabajo/{id}/inspeccion", a.obtenerInspeccion)
