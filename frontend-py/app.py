@@ -93,9 +93,9 @@ def cant_u(concepto, cantidad):
         return "—"
     return f"{txt} {UNIDAD.get(concepto, ('', '', ''))[2]}".strip()
 
-ESTADOS = ["RECEPCION", "DIAGNOSTICO", "ESPERA_REFACCION", "REPARACION", "PRUEBAS_RUTA", "TERMINADA", "ENTREGADO"]
+ESTADOS = ["RECEPCION", "DIAGNOSTICO", "ESPERA_REFACCION", "REPARACION", "PRUEBAS_RUTA", "TERMINADA", "ENTREGADO", "ANULADA"]
 LBL = {"RECEPCION": "Recepción", "DIAGNOSTICO": "Diagnóstico", "ESPERA_REFACCION": "Espera de refacción",
-       "REPARACION": "Reparación", "PRUEBAS_RUTA": "Pruebas de ruta", "TERMINADA": "Terminada", "ENTREGADO": "Entregado"}
+       "REPARACION": "Reparación", "PRUEBAS_RUTA": "Pruebas de ruta", "TERMINADA": "Terminada", "ENTREGADO": "Entregado", "ANULADA": "Anulada"}
 ROLES = {"RECEPCION": "Recepción", "TECNICO": "Técnico", "JEFE_TALLER": "Jefe de taller", "ADMIN": "Administrador"}
 ESPEC = {"MECANICO_TRADICIONAL": "Mecánico tradicional", "CERTIFICADO_ALTA_TENSION": "Certificado en alta tensión",
          "DIAGNOSTICO_ELECTRONICO": "Diagnóstico electrónico", "MECANICA_PESADA": "Mecánica pesada"}
@@ -333,7 +333,7 @@ def _ahora():
 @requiere()
 def tablero():
     """RF-10: por tecnico, los vehiculos asignados, los trabajos en espera y los vehiculos en rampa."""
-    lista = [o for o in api("GET", "/ordenes-trabajo", params={"limite": 500}) if o["estado"] != "ENTREGADO"]
+    lista = [o for o in api("GET", "/ordenes-trabajo", params={"limite": 500}) if o["estado"] not in ("ENTREGADO", "ANULADA")]
     ahora = _ahora()
     for o in lista:
         prom = o.get("prometido_en")
@@ -459,6 +459,10 @@ def orden(ot_id):
     ctx["refacciones"] = api("GET", "/refacciones") if rol in ("TECNICO", "JEFE_TALLER", "ADMIN") else []
     ctx["tecnicos"] = ([u for u in api("GET", "/usuarios") if u["rol"] == "TECNICO" and u["activo"]]) if priv else []
     ctx["versiones"] = (soft("GET", f"/ordenes-trabajo/{ot_id}/cotizacion/versiones") or []) if priv else []
+    if ot["estado"] in ("RECEPCION", "DIAGNOSTICO") and rol in ("RECEPCION", "JEFE_TALLER", "ADMIN"):
+        ctx["vehiculos"] = api("GET", "/vehiculos")
+    else:
+        ctx["vehiculos"] = []
     return render_template("orden.html", **ctx)
 
 
@@ -504,6 +508,8 @@ ACCIONES = {
     "garantia": ("POST", "/ordenes-trabajo/{id}/garantias", _garantia, "Garantía registrada."),
     "pedido": ("POST", "/ordenes-trabajo/{id}/pedidos", lambda f: opcional(f, "proveedor", "numero_guia", "eta", "refaccion_id"),
                "Pedido registrado; la orden quedó en espera de refacción."),
+    "anular": ("POST", "/ordenes-trabajo/{id}/anular", lambda f: {"motivo": f.get("motivo", "")}, "Orden anulada."),
+    "cambiar_vehiculo": ("PATCH", "/ordenes-trabajo/{id}/vehiculo", lambda f: {"vehiculo_id": f.get("vehiculo_id", "")}, "Vehículo de la orden corregido."),
 }
 
 
@@ -655,7 +661,7 @@ def refaccion_entrada(rid):
 @requiere()
 def herramientas():
     return render_template("herramientas.html", hs=api("GET", "/herramientas"), alertas=api("GET", "/herramientas/alertas"),
-                           ordenes=[o for o in api("GET", "/ordenes-trabajo") if o["estado"] != "ENTREGADO"],
+                           ordenes=[o for o in api("GET", "/ordenes-trabajo") if o["estado"] not in ("ENTREGADO", "ANULADA")],
                            tecnicos=([u for u in api("GET", "/usuarios") if u["rol"] == "TECNICO"] if puede("JEFE_TALLER", "ADMIN") else []))
 
 

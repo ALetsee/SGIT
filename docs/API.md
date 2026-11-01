@@ -37,6 +37,8 @@ En la columna *Roles*, «todos» significa cualquier usuario autenticado.
 | PATCH | `/ordenes-trabajo/{id}/asignar-tecnico` | Jefe de taller, Administrador | Asignar técnico (RF-09) |
 | PATCH | `/ordenes-trabajo/{id}/estado` | Recepción, Técnico, Jefe de taller, Administrador | Cambiar el estado (RF-11, RN-01, RN-02) |
 | PATCH | `/ordenes-trabajo/{id}/retraso` | Jefe de taller, Administrador | Motivo del retraso (RF-38) |
+| PATCH | `/ordenes-trabajo/{id}/vehiculo` | Recepción, Jefe de taller, Administrador | Corregir el vehículo de la orden (solo en Recepción o Diagnóstico); enviar `{"vehiculo_id":"..."}` |
+| POST | `/ordenes-trabajo/{id}/anular` | Jefe de taller, Administrador | Anular la orden con motivo (mínimo 10 caracteres); la orden pasa a ANULADA y no se reabre |
 | GET | `/ordenes-trabajo/{id}/checklist-hv` | todos | Ver el checklist de alto voltaje |
 | PUT | `/ordenes-trabajo/{id}/checklist-hv` | Técnico | Firmar el checklist HV (RF-13, RF-14) |
 | GET | `/ordenes-trabajo/{id}/inspeccion` | todos | Ver la inspección y las fotografías (RF-03 a RF-05) |

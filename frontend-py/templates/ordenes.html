@@ -50,7 +50,7 @@
     <a class="item {{ 'hv' if o.tipo != 'COMBUSTION' }}" href="{{ url_for('orden', ot_id=o.id) }}">
       <span class="folio">{{ o.folio }}</span>
       <span>{{ o.marca }} {{ o.modelo }}, {{ o.placas }}<small>{{ o.cliente_nombre }}{% if o.tecnico_nombre %} · {{ o.tecnico_nombre }}{% endif %}{% if o.tipo != 'COMBUSTION' %} · alto voltaje{% endif %}</small></span>
-      <span class="chip {{ 'done' if o.estado in ('TERMINADA','ENTREGADO') }}">{{ LBL[o.estado] }}</span>
+      <span class="chip {{ 'done' if o.estado in ('TERMINADA','ENTREGADO') }}{{ 'anulada' if o.estado == 'ANULADA' }}{{ ' bad' if o.retrasada|default(false) and o.estado not in ('TERMINADA','ENTREGADO','ANULADA') }}">{{ LBL[o.estado] }}</span>
     </a>
     {% else %}
     <div class="empty"><h3>No hay órdenes con ese filtro</h3><p>Cambia la búsqueda o crea una orden nueva.</p></div>

@@ -225,11 +225,11 @@ func (a *App) restablecerPassword(w http.ResponseWriter, r *http.Request, u *Use
 func (a *App) estadoTaller(w http.ResponseWriter, r *http.Request, u *User) {
 	ctx := r.Context()
 	res, err := oneRow(ctx, a.db,
-		`SELECT count(*) FILTER (WHERE estado <> 'ENTREGADO') AS abiertas,
+		`SELECT count(*) FILTER (WHERE estado NOT IN ('ENTREGADO','ANULADA')) AS abiertas,
 		        count(*) FILTER (WHERE estado = 'TERMINADA') AS listas_para_entrega,
-		        count(*) FILTER (WHERE estado <> 'ENTREGADO' AND prometido_en IS NOT NULL AND prometido_en < now()) AS retrasadas,
+		        count(*) FILTER (WHERE estado NOT IN ('ENTREGADO','ANULADA') AND prometido_en IS NOT NULL AND prometido_en < now()) AS retrasadas,
 		        count(*) FILTER (WHERE estado = 'ENTREGADO' AND entregado_en::date = current_date) AS entregadas_hoy,
-		        COALESCE(SUM(saldo) FILTER (WHERE estado <> 'ENTREGADO'), 0) AS por_cobrar
+		        COALESCE(SUM(saldo) FILTER (WHERE estado NOT IN ('ENTREGADO','ANULADA')), 0) AS por_cobrar
 		   FROM orden_trabajo`)
 	if err != nil {
 		fail(w, err)
@@ -250,7 +250,7 @@ func (a *App) estadoTaller(w http.ResponseWriter, r *http.Request, u *User) {
 	lista, err := rowsToMaps(ctx, a.db,
 		`SELECT ot.id, ot.folio, v.placas, v.marca, v.modelo, ot.prometido_en, ot.estado::text AS estado
 		   FROM orden_trabajo ot JOIN vehiculo v ON v.id = ot.vehiculo_id
-		  WHERE ot.estado <> 'ENTREGADO' AND ot.prometido_en IS NOT NULL AND ot.prometido_en < now()
+		  WHERE ot.estado NOT IN ('ENTREGADO','ANULADA') AND ot.prometido_en IS NOT NULL AND ot.prometido_en < now()
 		  ORDER BY ot.prometido_en LIMIT 5`)
 	if err != nil {
 		fail(w, err)
@@ -258,7 +258,7 @@ func (a *App) estadoTaller(w http.ResponseWriter, r *http.Request, u *User) {
 	}
 	extra, err := oneRow(ctx, a.db,
 		`SELECT (SELECT count(*) FROM prestamo_herramienta p LEFT JOIN orden_trabajo ot ON ot.id = p.ot_id
-		          WHERE p.devuelto_en IS NULL AND (ot.estado IN ('TERMINADA','ENTREGADO') OR p.prestado_en::date < current_date)) AS herramientas_sin_devolver,
+		          WHERE p.devuelto_en IS NULL AND (ot.estado IN ('TERMINADA','ENTREGADO','ANULADA') OR p.prestado_en::date < current_date)) AS herramientas_sin_devolver,
 		        (SELECT count(*) FROM refaccion WHERE existencia_minima > 0 AND existencia <= existencia_minima) AS refacciones_bajo_minimo`)
 	if err != nil {
 		fail(w, err)

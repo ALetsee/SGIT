@@ -90,6 +90,7 @@ details>summary{cursor:pointer;font-weight:700;color:var(--petrol);padding:6px 0
 .chip.warn{background:var(--hv);color:#1B1403}
 .chip.done{background:var(--ok-soft);color:var(--ok)}
 .chip.bad{background:var(--bad-soft);color:var(--bad)}
+.chip.anulada{background:var(--steel-soft);color:var(--muted);text-decoration:line-through}
 .carga{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 0}
 .pipe{display:flex;overflow-x:auto;margin:14px 0 4px;border:1px solid var(--line);border-radius:6px}
 .pipe form{display:flex;flex:1;margin:0}

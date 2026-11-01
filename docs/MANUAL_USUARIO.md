@@ -115,7 +115,11 @@ Orden de salida. Recepción, jefe de taller y administrador pueden generarla e i
 
 Entregar vehículo. Pasa la orden al estado Entregado y la saca del Tablero. A partir de ese momento, ninguna de sus partidas, autorizaciones o pagos se puede volver a modificar.
 
-Eliminar orden. Solo el administrador puede borrar una orden, y únicamente si todavía no fue entregada. La acción queda registrada en la bitácora de auditoría.
+Anular orden. Si un cliente desiste del servicio, el vehículo resulta ser pérdida total, o cualquier motivo válido impide continuar con la reparación, el jefe de taller o el administrador pueden anular la orden. La anulación cierra la orden permanentemente: no se puede reabrir ni cambiar a otro estado. El sistema pide un motivo de al menos 10 caracteres que queda registrado en la auditoría. Las órdenes anuladas ya no aparecen en el conteo de órdenes activas ni en las retrasadas. Solo se puede anular una orden que no haya sido entregada. Si la orden tiene pagos activos, primero hay que anular los pagos.
+
+Corregir vehículo. Si al crear la orden se eligió el vehículo equivocado, se puede corregir sin borrar la orden. Abra la orden, busque la sección Corregir vehículo de esta orden (aparece como un enlace que se expande al tocarlo), elija el vehículo correcto y guarde. Esta opción solo está disponible mientras la orden está en Recepción o Diagnóstico. Una vez que la orden avanza a Reparación o más, el vehículo ya no se puede cambiar.
+
+Eliminar orden. Solo el administrador puede borrar una orden, y únicamente si no tiene pagos activos ni ha sido entregada. Si hay pagos registrados, primero hay que anularlos. La acción queda registrada en la bitácora de auditoría.
 
 Inventario
 

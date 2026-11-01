@@ -76,7 +76,32 @@
       </div>
     </form>
     {% endif %}
-    {% if puede('ADMIN') and ot.estado != 'ENTREGADO' %}
+    {% if puede('JEFE_TALLER','ADMIN') and ot.estado not in ('ENTREGADO','ANULADA') %}
+    <details>
+      <summary>Anular esta orden</summary>
+      <form method="post" action="{{ url_for('orden_accion', ot_id=ot.id, nombre='anular') }}" data-confirm="¿Anular la orden {{ ot.folio }}? La orden se cerrará sin entrega y no se podrá reabrir.">
+        <input type="hidden" name="csrf" value="{{ csrf() }}">
+        <label for="motivo_anulacion">Motivo de la anulación (mínimo 10 caracteres)</label>
+        <textarea id="motivo_anulacion" name="motivo" required minlength="10" placeholder="Ej: el cliente desistió del servicio."></textarea>
+        <div class="actions"><button class="btn warn">Anular orden</button></div>
+      </form>
+    </details>
+    {% endif %}
+    {% if puede('RECEPCION','JEFE_TALLER','ADMIN') and ot.estado in ('RECEPCION','DIAGNOSTICO') %}
+    <details>
+      <summary>Corregir vehículo de esta orden</summary>
+      <form method="post" action="{{ url_for('orden_accion', ot_id=ot.id, nombre='cambiar_vehiculo') }}">
+        <input type="hidden" name="csrf" value="{{ csrf() }}">
+        <label for="vehiculo_corregir">Vehículo correcto</label>
+        <select id="vehiculo_corregir" name="vehiculo_id" required>
+          <option value="">Elige el vehículo correcto</option>
+          {% for v in vehiculos %}<option value="{{ v.id }}">{{ v.marca }} {{ v.modelo }}, {{ v.placas }}</option>{% endfor %}
+        </select>
+        <div class="actions"><button class="btn alt">Corregir vehículo</button></div>
+      </form>
+    </details>
+    {% endif %}
+    {% if puede('ADMIN') and ot.estado not in ('ENTREGADO','ANULADA') %}
     <form class="actions" method="post" action="{{ url_for('orden_eliminar', ot_id=ot.id) }}" data-confirm="¿Eliminar la orden {{ ot.folio }}? Esta acción queda en la auditoría y no se puede deshacer.">
       <input type="hidden" name="csrf" value="{{ csrf() }}"><button class="btn warn small">Eliminar orden</button>
     </form>
