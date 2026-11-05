@@ -15,7 +15,7 @@
 :root[data-tema="oscuro"]{
   --bg:#101418; --panel:#1A2026; --panel-2:#222A31;
   --ink:#E9EDF0; --muted:#9BA8B3; --line:#313A43;
-  --petrol:#F28A26; --petrol-soft:#3B2915;
+  --petrol:#F5A04E; --petrol-soft:#3B2915;
   --ok:#46B877; --ok-soft:#15301F; --bad:#EF6A5C; --bad-soft:#391F1C;
   --steel:#0C1013; --steel-ink:#FFFFFF; --steel-muted:#A9B5BF; --steel-soft:#262F37;
 }

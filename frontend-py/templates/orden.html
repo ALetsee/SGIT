@@ -6,7 +6,8 @@
 {% set idx = ESTADOS.index(ot.estado) %}
 {% set cerrada = ot.estado in ('TERMINADA','ENTREGADO') %}
 {% set hv_abierto = checklist and checklist.circuito_hv_off and checklist.service_plug_out and checklist.epp_certificado and checklist.firmado_en %}
-{% set recepcion_o_jefe = rol in ('RECEPCION','JEFE_TALLER','ADMIN') %}
+{% set puede_autorizar = rol in ('JEFE_TALLER','ADMIN') %}
+{% set recepcion_o_jefe = rol in ('JEFE_TALLER','ADMIN') %}
 {% set partidas_autorizadas = (cot.partidas or []) | selectattr('autorizada') | list | length > 0 %}
 {% set ruta = url_for('orden', ot_id=ot.id) %}
 
@@ -215,12 +216,12 @@
         <td>
           {% if p.autorizada %}
             <span class="chip done">Autorizada</span><br><small>{{ MEDIOS[p.medio_autorizacion] }}, {{ p.autorizado_en|fecha }}</small>
-            {% if recepcion_o_jefe and ot.estado != 'ENTREGADO' %}
+            {% if puede_autorizar and ot.estado not in ('TERMINADA','ENTREGADO','ANULADA') %}
             <form class="inline" method="post" action="{{ url_for('partida_autorizar', pid=p.id) }}"><input type="hidden" name="csrf" value="{{ csrf() }}"><input type="hidden" name="volver" value="{{ ruta }}"><input type="hidden" name="autorizada" value="0"><button class="btn alt small">Rechazar</button></form>
             {% endif %}
           {% else %}
             <span class="chip bad">Pendiente</span>
-            {% if recepcion_o_jefe and ot.estado != 'ENTREGADO' %}
+            {% if puede_autorizar and ot.estado not in ('TERMINADA','ENTREGADO','ANULADA') %}
             <form method="post" action="{{ url_for('partida_autorizar', pid=p.id) }}" style="margin-top:6px;display:flex;gap:6px">
               <input type="hidden" name="csrf" value="{{ csrf() }}"><input type="hidden" name="volver" value="{{ ruta }}"><input type="hidden" name="autorizada" value="1">
               <select name="medio" aria-label="Medio de autorización" style="min-height:34px;padding:4px">{% for k, v in MEDIOS.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select>
@@ -252,7 +253,7 @@
         <tr><td colspan="{{ 5 if priv else 2 }}">Total autorizado por el cliente</td><td class="num">{{ cot.total_autorizado|money }}</td><td></td></tr>
       </tfoot>
     </table></div>
-    {% if recepcion_o_jefe and ot.estado != 'ENTREGADO' %}
+    {% if puede_autorizar and ot.estado not in ('TERMINADA','ENTREGADO','ANULADA') %}
     <form class="actions" method="post" action="{{ url_for('orden_accion', ot_id=ot.id, nombre='autorizar_todas') }}">
       <input type="hidden" name="csrf" value="{{ csrf() }}">
       <label for="medio_todas" style="margin:0">Autorizar todo el presupuesto por</label>
@@ -330,7 +331,7 @@
   {% if recepcion_o_jefe %}
   <section class="panel">
     <h3>Cobranza y entrega</h3>
-    <p style="font-size:20px;margin:0 0 8px">Saldo pendiente: <strong>{{ ot.saldo|money }}</strong></p>
+    <p style="font-size:20px;margin:0 0 8px">Saldo pendiente: <strong class="{{ 'rojo' if ot.saldo|float > 0 }}">{{ ot.saldo|money }}</strong></p>
     {% if pagos %}
     <div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Método</th><th class="num">Monto</th><th></th>{% if rol == 'ADMIN' %}<th></th>{% endif %}</tr></thead><tbody>
       {% for p in pagos %}<tr{{ ' class="anulado"'|safe if p.anulado_en }}>

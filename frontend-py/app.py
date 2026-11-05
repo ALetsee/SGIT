@@ -311,6 +311,8 @@ def logout():
 @app.route("/")
 @requiere()
 def inicio():
+    if usuario()["rol"] == "TECNICO":
+        return redirect(url_for("tablero"))
     return redirect(url_for("estado" if puede("JEFE_TALLER", "ADMIN") else "ordenes"))
 
 
@@ -322,6 +324,8 @@ def salud():
 @app.route("/estado")
 @requiere()
 def estado():
+    if usuario()["rol"] == "TECNICO":
+        return redirect(url_for("tablero"))
     return render_template("estado.html", e=api("GET", "/estado-taller"))
 
 
@@ -631,6 +635,8 @@ def vehiculo(vid):
 @app.route("/inventario")
 @requiere()
 def inventario():
+    if usuario()["rol"] in ("RECEPCION", "TECNICO"):
+        return redirect(url_for("tablero"))
     q = request.args.get("q", "")
     return render_template("inventario.html", refs=api("GET", "/refacciones", params={"q": q}), q=q)
 
@@ -660,6 +666,8 @@ def refaccion_entrada(rid):
 @app.route("/herramientas")
 @requiere()
 def herramientas():
+    if usuario()["rol"] == "RECEPCION":
+        return redirect(url_for("ordenes"))
     return render_template("herramientas.html", hs=api("GET", "/herramientas"), alertas=api("GET", "/herramientas/alertas"),
                            ordenes=[o for o in api("GET", "/ordenes-trabajo") if o["estado"] not in ("ENTREGADO", "ANULADA")],
                            tecnicos=([u for u in api("GET", "/usuarios") if u["rol"] == "TECNICO"] if puede("JEFE_TALLER", "ADMIN") else []))

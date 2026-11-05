@@ -1,5 +1,16 @@
 # Registro de cambios
 
+## 1.4.1
+Correccion de permisos de interfaz por rol.
+
+- Recepcion ya no ve Inventario ni Herramientas en el menu.
+- Tecnicos ya no ven Resumen, Ordenes ni Inventario; al entrar van directo al Tablero.
+- Solo Jefe de taller y Administrador pueden autorizar y rechazar partidas del presupuesto.
+- No se puede rechazar una partida en ordenes con estado Terminada, Entregada o Anulada.
+- El saldo pendiente ahora se muestra en rojo.
+- Color de enlaces en modo oscuro ajustado para mejor legibilidad.
+- Redireccion de rutas: si un tecnico navega a /estado o /inventario, se le redirige al Tablero.
+
 ## 1.4.0
 Correcciones de la auditoria de validacion (12 hallazgos).
 
