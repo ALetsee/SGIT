@@ -1,76 +1,102 @@
 #!/usr/bin/env python3
 """Prepara datos para la demostracion final del SGIT.
-
-Crea:
-- 2 vehiculos EV/HEV con checklist HV firmado (Tesla Model 3, Porsche Taycan)
-- 6 vehiculos en TERMINADA con saldo pendiente (para cobrar y entregar en vivo varias veces)
-- 6 vehiculos JDM en distintos estados
-
-Total: 14 vehiculos nuevos + 4 clientes nuevos.
-
-Corre DESPUES de cargar_demo.py. Usa las mismas cuentas de demo.
-Uso:  python3 preparar_demo_final.py
+Corre DESPUES de cargar_demo.py. Idempotente: si ya existen los vehiculos, los salta.
 """
-import sys
+import struct, sys, zlib
 from datetime import date, timedelta
 
 try:
     import requests
 except ImportError:
-    sys.exit("Instala requests: pip3 install requests")
+    sys.exit("pip3 install requests")
 
 API = "http://127.0.0.1:8081"
-DOMINIO = "electromotorservices.local"
+DOM = "electromotorservices.local"
 
 
 def login(correo, clave):
-    r = requests.post(API + "/auth/login", json={"email": correo, "password": clave}, timeout=30)
+    r = requests.post(f"{API}/auth/login", json={"email": correo, "password": clave}, timeout=30)
     if r.status_code != 200:
-        sys.exit(f"No se pudo entrar como {correo}: {r.json().get('error', r.status_code)}")
+        sys.exit(f"Login fallido {correo}: {r.text[:120]}")
     tok = r.json()["access_token"]
-    class Cli:
-        def __call__(self, method, path, **kw):
-            r2 = requests.request(method, API + path, headers={"Authorization": f"Bearer {tok}"}, timeout=30, **kw)
-            if r2.status_code >= 400:
-                print(f"  AVISO {method} {path}: {r2.status_code} {r2.text[:200]}")
-                return {}
-            ct = r2.headers.get("content-type", "")
-            return r2.json() if "json" in ct else {}
-    return Cli()
+    def call(method, path, **kw):
+        r2 = requests.request(method, API + path, headers={"Authorization": f"Bearer {tok}"}, timeout=30, **kw)
+        if r2.status_code >= 400:
+            return None
+        return r2.json() if "json" in r2.headers.get("content-type", "") else {}
+    return call
 
 
-def buscar_o_crear_cliente(api, nombre, tel, email):
-    for c in api("GET", "/clientes"):
+def png_img(r, g, b):
+    w, h = 100, 80
+    raw = b""
+    for _ in range(h):
+        raw += b"\x00" + bytes([r, g, b]) * w
+    def ch(t, d):
+        c = t + d
+        return struct.pack(">I", len(d)) + c + struct.pack(">I", zlib.crc32(c) & 0xFFFFFFFF)
+    return (b"\x89PNG\r\n\x1a\n" + ch(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+            + ch(b"IDAT", zlib.compress(raw)) + ch(b"IEND", b""))
+
+
+FOTOS = [(180,40,40), (40,120,180), (50,160,80), (200,180,50)]
+
+
+def subir_4_fotos(api, ot_id):
+    for i, c in enumerate(FOTOS):
+        api("POST", f"/ordenes-trabajo/{ot_id}/fotografias",
+            files={"foto": (f"demo{i+1}.png", png_img(*c), "image/png")})
+
+
+def buscar_cliente(api, nombre):
+    for c in (api("GET", "/clientes") or []):
         if c.get("nombre") == nombre:
             return c["id"]
+    return None
+
+
+def crear_cliente(api, nombre, tel, email):
+    cid = buscar_cliente(api, nombre)
+    if cid:
+        return cid
     r = api("POST", "/clientes", json={"nombre": nombre, "telefono": tel, "email": email})
-    return r.get("id", "")
+    return r.get("id") if r else None
 
 
-def crear_vehiculo(api, cli_id, vin, placas, marca, modelo, anio, tipo, trans, km):
+def buscar_vehiculo(api, placas):
+    for v in (api("GET", "/vehiculos") or []):
+        if v.get("placas") == placas:
+            return v["id"]
+    return None
+
+
+def crear_vehiculo(api, cli, vin, placas, marca, modelo, anio, tipo, trans, km):
+    vid = buscar_vehiculo(api, placas)
+    if vid:
+        print(f"    {marca} {modelo} ({placas}) ya existe, saltando")
+        return vid, True
     r = api("POST", "/vehiculos", json={
-        "cliente_id": cli_id, "vin": vin, "placas": placas, "marca": marca,
+        "cliente_id": cli, "vin": vin, "placas": placas, "marca": marca,
         "modelo": modelo, "anio": anio, "tipo": tipo, "transmision": trans,
         "kilometraje_actual": km
     })
-    return r.get("id", "")
+    return (r.get("id") if r else None), False
 
 
-def crear_ot(api, vid, tipo, falla, km, dias, comb=None, carga=None):
-    niveles = {}
-    if tipo in ("COMBUSTION",):
-        niveles["nivel_combustible_pct"] = comb or 50
-    elif tipo == "EV":
-        niveles["carga_bateria_pct"] = carga or 70
-    else:
-        niveles["nivel_combustible_pct"] = comb or 50
-        niveles["carga_bateria_pct"] = carga or 60
+def niveles(tipo, comb=50, carga=65):
+    if tipo == "EV": return {"carga_bateria_pct": carga}
+    if tipo in ("HEV","PHEV"): return {"nivel_combustible_pct": comb, "carga_bateria_pct": carga}
+    return {"nivel_combustible_pct": comb}
+
+
+def crear_ot(api, vid, tipo, falla, km, dias, comb=50, carga=65):
     hoy = date.today()
     r = api("POST", "/ordenes-trabajo", json={
         "vehiculo_id": vid, "falla_reportada": falla, "km_ingreso": km,
-        "prometido_en": (hoy + timedelta(days=dias)).isoformat(), **niveles
+        "prometido_en": (hoy + timedelta(days=dias)).isoformat(),
+        **niveles(tipo, comb, carga)
     })
-    return r.get("id", "")
+    return r.get("id") if r else None
 
 
 def main():
@@ -78,192 +104,169 @@ def main():
     if not pw:
         sys.exit("Contrasena vacia.")
 
-    jefe = login(f"jefe@{DOMINIO}", pw)
-    rec = login(f"recepcion@{DOMINIO}", pw)
-    thv = login(f"tecnico.hv@{DOMINIO}", pw)
-    tmec = login(f"tecnico.mec@{DOMINIO}", pw)
+    jefe = login(f"jefe@{DOM}", pw)
+    rec = login(f"recepcion@{DOM}", pw)
+    thv = login(f"tecnico.hv@{DOM}", pw)
+    tmec = login(f"tecnico.mec@{DOM}", pw)
 
     usuarios = jefe("GET", "/usuarios")
-    id_thv = next(u["id"] for u in usuarios if u["email"] == f"tecnico.hv@{DOMINIO}")
-    id_tmec = next(u["id"] for u in usuarios if u["email"] == f"tecnico.mec@{DOMINIO}")
-
-    hoy = date.today()
+    id_thv = next(u["id"] for u in usuarios if u["email"] == f"tecnico.hv@{DOM}")
+    id_tmec = next(u["id"] for u in usuarios if u["email"] == f"tecnico.mec@{DOM}")
 
     # ── Clientes ──
     print("1/4 Clientes...")
-    c_electromov = buscar_o_crear_cliente(rec, "Electromovilidad del Sureste", "9931330001", "contacto.electromov@ejemplo.test")
-    c_jdm = buscar_o_crear_cliente(rec, "JDM Classics Villahermosa", "9934550022", "ventas@jdmclassics.test")
-    c_flota = buscar_o_crear_cliente(rec, "Flota Empresarial del Golfo", "9931440033", "flota@empresarialgolfo.test")
-    c_premium = buscar_o_crear_cliente(rec, "Premium Auto Care", "9934660044", "servicio@premiumauto.test")
+    c1 = crear_cliente(rec, "Electromovilidad del Sureste", "9931330001", "electromov@ejemplo.test")
+    c2 = crear_cliente(rec, "JDM Classics Villahermosa", "9934550022", "ventas@jdmclassics.test")
+    c3 = crear_cliente(rec, "Flota Empresarial del Golfo", "9931440033", "flota@empresarial.test")
+    c4 = crear_cliente(rec, "Premium Auto Care", "9934660044", "servicio@premiumauto.test")
 
-    # ── Vehiculos con checklist HV firmado ──
-    print("2/4 Vehiculos con checklist HV firmado...")
+    def flujo_completo(cli, vin, placas, marca, modelo, anio, tipo, trans, km, falla, km_ing,
+                       tec_id, tec_api, partidas, anticipo, estado_final, checklist=False,
+                       comb=50, carga=65, insp="Sin danos.", pert="Gato y herramienta."):
+        vid, ya = crear_vehiculo(rec, cli, vin, placas, marca, modelo, anio, tipo, trans, km)
+        if not vid:
+            print(f"  ERROR creando {marca} {modelo}")
+            return
+        if ya:
+            return
 
-    # Tesla Model 3
-    vid = crear_vehiculo(rec, c_electromov, "5YJ3E1EA8RF100099", "TAB-EV3-X", "Tesla", "Model 3", 2024, "EV", "AUTOMATICA", 22000)
-    ot = crear_ot(rec, vid, "EV", "Ruido en suspension delantera y alerta de calibracion de frenos regenerativos", 22100, 2, carga=85)
-    jefe("PATCH", f"/ordenes-trabajo/{ot}/asignar-tecnico", json={"tecnico_id": id_thv})
-    thv("PATCH", f"/ordenes-trabajo/{ot}/estado", json={"estado": "DIAGNOSTICO"})
-    thv("PUT", f"/ordenes-trabajo/{ot}/checklist-hv", json={"circuito_hv_off": True, "service_plug_out": True, "epp_certificado": True})
-    thv("PATCH", f"/ordenes-trabajo/{ot}/estado", json={"estado": "REPARACION"})
-    thv("POST", f"/ordenes-trabajo/{ot}/horas", json={"horas": 2, "nota": "Revision de suspension y calibracion regenerativa"})
-    jefe("POST", f"/ordenes-trabajo/{ot}/partidas", json={"concepto": "SERVICIO_ELECTRICO", "descripcion": "Calibracion frenos regenerativos y revision suspension EV", "cantidad": 1, "costo": 2800})
-    rec("POST", f"/ordenes-trabajo/{ot}/autorizar-todas", json={"medio": "WHATSAPP"})
-    print("  Tesla Model 3 -> Reparacion, checklist HV firmado")
+        ot = crear_ot(rec, vid, tipo, falla, km_ing, -1 if estado_final in ("TERMINADA","ENTREGADO") else 3, comb, carga)
+        if not ot:
+            print(f"  ERROR creando OT para {marca} {modelo}")
+            return
 
-    # Porsche Taycan
-    vid = crear_vehiculo(rec, c_premium, "WP0AA2Y18RSA20077", "TAB-TYC-P", "Porsche", "Taycan 4S", 2024, "EV", "AUTOMATICA", 9800)
-    ot = crear_ot(rec, vid, "EV", "Alerta de bateria de alto voltaje y perdida de autonomia", 9900, 3, carga=42)
-    jefe("PATCH", f"/ordenes-trabajo/{ot}/asignar-tecnico", json={"tecnico_id": id_thv})
-    thv("PATCH", f"/ordenes-trabajo/{ot}/estado", json={"estado": "DIAGNOSTICO"})
-    thv("PUT", f"/ordenes-trabajo/{ot}/checklist-hv", json={"circuito_hv_off": True, "service_plug_out": True, "epp_certificado": True})
-    thv("PATCH", f"/ordenes-trabajo/{ot}/estado", json={"estado": "REPARACION"})
-    thv("POST", f"/ordenes-trabajo/{ot}/horas", json={"horas": 4, "nota": "Diagnostico de modulo de bateria HV y revision de celdas"})
-    jefe("POST", f"/ordenes-trabajo/{ot}/partidas", json={"concepto": "SERVICIO_ELECTRICO", "descripcion": "Diagnostico y recalibracion de modulo de bateria HV", "cantidad": 1, "costo": 8500})
-    rec("POST", f"/ordenes-trabajo/{ot}/autorizar-todas", json={"medio": "CORREO"})
-    print("  Porsche Taycan 4S -> Reparacion, checklist HV firmado")
+        rec("PUT", f"/ordenes-trabajo/{ot}/inspeccion", json={"descripcion": insp, "pertenencias": pert})
+        subir_4_fotos(rec, ot)
 
-    # ── Vehiculos en TERMINADA con saldo ──
-    print("3/4 Vehiculos en TERMINADA con saldo pendiente...")
+        if estado_final == "RECEPCION":
+            print(f"  {marca} {modelo} ({placas}) -> Recepcion")
+            return
 
-    terminadas = [
-        (c_electromov, "3MZBPAFM0RM200088", "TAB-MZ3-K", "Mazda", "3 Sedan", 2023, "COMBUSTION", "AUTOMATICA", 35000,
-         "Servicio mayor: cambio de aceite, filtros y revision de frenos", 35200, 40,
-         [("MANO_OBRA", "Servicio mayor completo", 3, 280), ("REFACCION_NUEVA", "Kit de filtros (aceite+aire+cabina)", 1, 850)], 1000),
-
-        (c_flota, "1G1YY22G575100033", "TAB-CAM-V", "Chevrolet", "Camaro SS", 2023, "COMBUSTION", "MANUAL", 18000,
-         "Ruido en diferencial trasero y vibracion a alta velocidad", 18200, 55,
-         [("MANO_OBRA", "Diagnostico y ajuste de diferencial", 4, 350), ("REFACCION_NUEVA", "Kit de sellos de diferencial", 1, 1200)], 1500),
-
-        (c_premium, "WBAPH5C55BA300044", "TAB-BM3-W", "BMW", "330i", 2022, "COMBUSTION", "AUTOMATICA", 42000,
-         "Fuga de refrigerante y sensor de temperatura erratico", 42300, 35,
-         [("MANO_OBRA", "Cambio de bomba de agua y termostato", 3, 400), ("REFACCION_NUEVA", "Bomba de agua electrica", 1, 2800)], 2000),
-
-        (c_flota, "1HGCV1F34PA400055", "TAB-ACC-R", "Honda", "Accord", 2023, "HEV", "CVT", 28000,
-         "Alerta de sistema hibrido y consumo excesivo de combustible", 28300, 60,
-         [("SERVICIO_ELECTRICO", "Diagnostico y recalibracion sistema hibrido", 1, 1800), ("MANO_OBRA", "Cambio de bujias y limpieza de inyectores", 2, 300)], 1000),
-
-        (c_premium, "JN1TBNT30Z0600066", "TAB-Z34-N", "Nissan", "370Z", 2021, "COMBUSTION", "MANUAL", 55000,
-         "Afinacion mayor y cambio de embrague", 55200, 45,
-         [("MANO_OBRA", "Cambio de embrague y afinacion mayor", 8, 300), ("REFACCION_NUEVA", "Kit de embrague Exedy Stage 1", 1, 4500)], 3000),
-
-        (c_electromov, "JTDKN3DU5A5700077", "TAB-PRI-T", "Toyota", "Prius", 2024, "HEV", "CVT", 15000,
-         "Revision de 15,000 km y calibracion de frenos regenerativos", 15100, 65,
-         [("SERVICIO_ELECTRICO", "Revision hibrida 15k km", 1, 1200), ("MANO_OBRA", "Cambio de aceite sintetico y filtros", 1, 350)], 500),
-    ]
-
-    for cli_id, vin, placas, marca, modelo, anio, tipo, trans, km, falla, km_ing, comb, partidas, anticipo in terminadas:
-        vid = crear_vehiculo(rec, cli_id, vin, placas, marca, modelo, anio, tipo, trans, km)
-        tec_id = id_thv if tipo in ("EV", "HEV", "PHEV") else id_tmec
-        tec_api = thv if tipo in ("EV", "HEV", "PHEV") else tmec
-
-        ot = crear_ot(rec, vid, tipo, falla, km_ing, -1, comb=comb)
-        rec("PUT", f"/ordenes-trabajo/{ot}/inspeccion", json={"descripcion": "Sin danos visibles.", "pertenencias": "Llanta de refaccion y gato."})
         jefe("PATCH", f"/ordenes-trabajo/{ot}/asignar-tecnico", json={"tecnico_id": tec_id})
         tec_api("PATCH", f"/ordenes-trabajo/{ot}/estado", json={"estado": "DIAGNOSTICO"})
 
-        if tipo in ("EV", "HEV", "PHEV"):
-            thv("PUT", f"/ordenes-trabajo/{ot}/checklist-hv", json={"circuito_hv_off": True, "service_plug_out": True, "epp_certificado": True})
+        if estado_final == "DIAGNOSTICO":
+            if partidas:
+                tec_api("POST", f"/ordenes-trabajo/{ot}/horas", json={"horas": partidas[0][2], "nota": partidas[0][1]})
+            print(f"  {marca} {modelo} ({placas}) -> Diagnostico")
+            return
+
+        if checklist:
+            thv("PUT", f"/ordenes-trabajo/{ot}/checklist-hv",
+                json={"circuito_hv_off": True, "service_plug_out": True, "epp_certificado": True})
+
+        if estado_final == "ESPERA_REFACCION":
+            tec_api("PATCH", f"/ordenes-trabajo/{ot}/estado", json={"estado": "ESPERA_REFACCION"})
+            jefe("PATCH", f"/ordenes-trabajo/{ot}/retraso", json={"motivo": "REFACCION"})
+            print(f"  {marca} {modelo} ({placas}) -> Espera refaccion")
+            return
 
         tec_api("PATCH", f"/ordenes-trabajo/{ot}/estado", json={"estado": "REPARACION"})
-        tec_api("POST", f"/ordenes-trabajo/{ot}/horas", json={"horas": partidas[0][2], "nota": partidas[0][1]})
 
         for concepto, desc, cant, costo in partidas:
-            jefe("POST", f"/ordenes-trabajo/{ot}/partidas", json={"concepto": concepto, "descripcion": desc, "cantidad": cant, "costo": costo})
+            if concepto == "MANO_OBRA":
+                tec_api("POST", f"/ordenes-trabajo/{ot}/horas", json={"horas": cant, "nota": desc})
+            jefe("POST", f"/ordenes-trabajo/{ot}/partidas", json={
+                "concepto": concepto, "descripcion": desc, "cantidad": cant, "costo": costo
+            })
 
         rec("POST", f"/ordenes-trabajo/{ot}/autorizar-todas", json={"medio": "FIRMA"})
-        rec("POST", f"/ordenes-trabajo/{ot}/pagos", json={"monto": anticipo, "metodo": "EFECTIVO", "tipo": "ANTICIPO"})
+
+        if estado_final == "REPARACION":
+            print(f"  {marca} {modelo} ({placas}) -> Reparacion")
+            return
 
         tec_api("PATCH", f"/ordenes-trabajo/{ot}/estado", json={"estado": "PRUEBAS_RUTA"})
+        if estado_final == "PRUEBAS_RUTA":
+            print(f"  {marca} {modelo} ({placas}) -> Pruebas de ruta")
+            return
+
         tec_api("PATCH", f"/ordenes-trabajo/{ot}/estado", json={"estado": "TERMINADA"})
 
-        saldo = rec("GET", f"/ordenes-trabajo/{ot}").get("saldo", "?")
-        print(f"  {marca} {modelo} ({placas}) -> Terminada, saldo ${saldo}")
+        if anticipo and anticipo > 0:
+            rec("POST", f"/ordenes-trabajo/{ot}/pagos", json={"monto": anticipo, "metodo": "EFECTIVO", "tipo": "ANTICIPO"})
 
-    # ── Vehiculos JDM en distintos estados ──
+        if estado_final == "TERMINADA":
+            ot_data = rec("GET", f"/ordenes-trabajo/{ot}")
+            saldo = ot_data.get("saldo", "?") if isinstance(ot_data, dict) else "?"
+            print(f"  {marca} {modelo} ({placas}) -> Terminada, saldo ${saldo}")
+            return
+
+        if estado_final == "ENTREGADO":
+            ot_data = rec("GET", f"/ordenes-trabajo/{ot}")
+            saldo = float(ot_data.get("saldo", 0)) if isinstance(ot_data, dict) else 0
+            if saldo > 0:
+                rec("POST", f"/ordenes-trabajo/{ot}/pagos", json={"monto": saldo, "metodo": "TRANSFERENCIA", "tipo": "FINAL"})
+            rec("POST", f"/ordenes-trabajo/{ot}/garantias", json={"tipo": "MANO_OBRA", "dias": 90, "kilometros": 5000})
+            rec("PATCH", f"/ordenes-trabajo/{ot}/estado", json={"estado": "ENTREGADO"})
+            print(f"  {marca} {modelo} ({placas}) -> Entregado")
+            return
+
+    # ── 2. Con checklist HV firmado ──
+    print("2/4 Vehiculos con checklist HV...")
+    flujo_completo(c1, "5YJ3E1EA8RF100099", "TAB-EV3-X", "Tesla", "Model 3", 2024, "EV", "AUTOMATICA", 22000,
+        "Ruido en suspension delantera y alerta de calibracion de frenos regenerativos", 22100,
+        id_thv, thv, [("SERVICIO_ELECTRICO", "Calibracion frenos regenerativos", 1, 2800)], 0, "REPARACION", checklist=True, carga=85)
+
+    flujo_completo(c4, "WP0AA2Y18RSA200XX", "TAB-TYC-P", "Porsche", "Taycan 4S", 2024, "EV", "AUTOMATICA", 9800,
+        "Alerta de bateria HV y perdida de autonomia", 9900,
+        id_thv, thv, [("SERVICIO_ELECTRICO", "Diagnostico modulo bateria HV", 1, 8500)], 0, "REPARACION", checklist=True, carga=42)
+
+    # ── 3. En TERMINADA con saldo ──
+    print("3/4 Vehiculos en TERMINADA con saldo...")
+    flujo_completo(c1, "3MZBPAFM0RM200088", "TAB-MZ3-K", "Mazda", "3 Sedan", 2023, "COMBUSTION", "AUTOMATICA", 35000,
+        "Servicio mayor: cambio de aceite, filtros y revision de frenos", 35200,
+        id_tmec, tmec, [("MANO_OBRA", "Servicio mayor completo", 3, 280), ("TRABAJO_EXTERNO", "Kit de filtros", 1, 850)], 1000, "TERMINADA", comb=40)
+
+    flujo_completo(c3, "1G1YY22G575100033", "TAB-CAM-V", "Chevrolet", "Camaro SS", 2023, "COMBUSTION", "MANUAL", 18000,
+        "Ruido en diferencial trasero y vibracion a alta velocidad", 18200,
+        id_tmec, tmec, [("MANO_OBRA", "Diagnostico y ajuste de diferencial", 4, 350), ("TRABAJO_EXTERNO", "Kit sellos diferencial", 1, 1200)], 1500, "TERMINADA", comb=55)
+
+    flujo_completo(c4, "WBAPH5C55BA300044", "TAB-BM3-W", "BMW", "330i", 2022, "COMBUSTION", "AUTOMATICA", 42000,
+        "Fuga de refrigerante y sensor de temperatura erratico", 42300,
+        id_tmec, tmec, [("MANO_OBRA", "Cambio de bomba de agua y termostato", 3, 400), ("TRABAJO_EXTERNO", "Bomba de agua electrica BMW", 1, 2800)], 1500, "TERMINADA", comb=35)
+
+    flujo_completo(c3, "1HGCV1F34PA400055", "TAB-ACC-R", "Honda", "Accord Hybrid", 2023, "HEV", "CVT", 28000,
+        "Alerta de sistema hibrido y consumo excesivo", 28300,
+        id_thv, thv, [("SERVICIO_ELECTRICO", "Recalibracion sistema hibrido", 1, 1800), ("MANO_OBRA", "Cambio de bujias", 2, 300)], 1000, "TERMINADA", checklist=True, comb=60)
+
+    flujo_completo(c4, "JN1TBNT30Z0600066", "TAB-Z34-N", "Nissan", "370Z", 2021, "COMBUSTION", "MANUAL", 55000,
+        "Afinacion mayor y cambio de embrague", 55200,
+        id_tmec, tmec, [("MANO_OBRA", "Cambio de embrague y afinacion", 8, 300), ("TRABAJO_EXTERNO", "Kit embrague Exedy", 1, 4500)], 3000, "TERMINADA", comb=45)
+
+    flujo_completo(c1, "JTDKN3DU5A5700077", "TAB-PRI-T", "Toyota", "Prius", 2024, "HEV", "CVT", 15000,
+        "Revision 15k km y calibracion regenerativa", 15100,
+        id_thv, thv, [("SERVICIO_ELECTRICO", "Revision hibrida 15k", 1, 1200), ("MANO_OBRA", "Cambio aceite y filtros", 1, 350)], 500, "TERMINADA", checklist=True, comb=65)
+
+    # ── 4. JDM ──
     print("4/4 Vehiculos JDM...")
+    flujo_completo(c2, "JT2JA82J0T0100011", "TAB-SUP-A", "Toyota", "Supra RZ (JZA80)", 1997, "COMBUSTION", "MANUAL", 124000,
+        "Fuga de boost del turbo y revision de turbina CT20", 124200,
+        id_tmec, tmec, [], 0, "RECEPCION", comb=55,
+        insp="Pintura custom azul metalico. Intercooler frontal aftermarket. Escape HKS.", pert="Boost controller GReddy.")
 
-    # Supra en Recepcion
-    vid = crear_vehiculo(rec, c_jdm, "JT2JA82J0T0100011", "TAB-SUP-A", "Toyota", "Supra RZ (JZA80)", 1997, "COMBUSTION", "MANUAL", 124000)
-    ot = crear_ot(rec, vid, "COMBUSTION", "Fuga de boost del turbo y revision de turbina CT20", 124200, 4, comb=55)
-    rec("PUT", f"/ordenes-trabajo/{ot}/inspeccion", json={"descripcion": "Pintura custom azul metalico. Intercooler frontal aftermarket. Escape HKS.", "pertenencias": "Boost controller GReddy, herramienta."})
-    print("  Toyota Supra RZ -> Recepcion")
+    flujo_completo(c2, "FD3S6200022MAZDA1", "TAB-RX7-B", "Mazda", "RX-7 FD Spirit R", 2002, "COMBUSTION", "MANUAL", 68000,
+        "Perdida de compresion en rotor trasero y consumo de aceite", 68200,
+        id_tmec, tmec, [("MANO_OBRA", "Prueba de compresion rotativa", 3, 350)], 0, "DIAGNOSTICO", comb=40)
 
-    # RX-7 en Diagnostico
-    vid = crear_vehiculo(rec, c_jdm, "FD3S100022", "TAB-RX7-B", "Mazda", "RX-7 FD Spirit R", 2002, "COMBUSTION", "MANUAL", 68000)
-    ot = crear_ot(rec, vid, "COMBUSTION", "Perdida de compresion en rotor trasero y consumo excesivo de aceite", 68200, 2, comb=40)
-    jefe("PATCH", f"/ordenes-trabajo/{ot}/asignar-tecnico", json={"tecnico_id": id_tmec})
-    tmec("PATCH", f"/ordenes-trabajo/{ot}/estado", json={"estado": "DIAGNOSTICO"})
-    tmec("POST", f"/ordenes-trabajo/{ot}/horas", json={"horas": 3, "nota": "Prueba de compresion rotativa: rotor trasero bajo"})
-    print("  Mazda RX-7 FD -> Diagnostico")
+    flujo_completo(c2, "JHMAP11433T300033", "TAB-S2K-C", "Honda", "S2000 AP1", 2003, "COMBUSTION", "MANUAL", 95000,
+        "Sincronizador de segunda gastado y VTEC ruidosa", 95300,
+        id_tmec, tmec, [("MANO_OBRA", "Reconstruccion de caja y ajuste VTEC", 8, 350), ("TRABAJO_EXTERNO", "Kit sincronizadores Synchrotech", 1, 5200)], 0, "REPARACION", comb=60)
 
-    # S2000 en Reparacion
-    vid = crear_vehiculo(rec, c_jdm, "JHMAP11433T300033", "TAB-S2K-C", "Honda", "S2000 AP1", 2003, "COMBUSTION", "MANUAL", 95000)
-    ot = crear_ot(rec, vid, "COMBUSTION", "Sincronizador de segunda gastado y valvula VTEC ruidosa", 95300, 1, comb=60)
-    jefe("PATCH", f"/ordenes-trabajo/{ot}/asignar-tecnico", json={"tecnico_id": id_tmec})
-    tmec("PATCH", f"/ordenes-trabajo/{ot}/estado", json={"estado": "DIAGNOSTICO"})
-    tmec("PATCH", f"/ordenes-trabajo/{ot}/estado", json={"estado": "REPARACION"})
-    tmec("POST", f"/ordenes-trabajo/{ot}/horas", json={"horas": 5, "nota": "Desmontaje de caja y revision de sincronizadores"})
-    jefe("POST", f"/ordenes-trabajo/{ot}/partidas", json={"concepto": "MANO_OBRA", "descripcion": "Reconstruccion de caja de cambios y ajuste VTEC", "cantidad": 8, "costo": 350})
-    jefe("POST", f"/ordenes-trabajo/{ot}/partidas", json={"concepto": "REFACCION_NUEVA", "descripcion": "Kit de sincronizadores Synchrotech", "cantidad": 1, "costo": 5200})
-    rec("POST", f"/ordenes-trabajo/{ot}/autorizar-todas", json={"medio": "WHATSAPP"})
-    print("  Honda S2000 AP1 -> Reparacion")
+    flujo_completo(c2, "JA3AU26U07U400044", "TAB-EVO-D", "Mitsubishi", "Lancer Evo IX MR", 2006, "COMBUSTION", "MANUAL", 78000,
+        "Revision de turbo, cambio de intercooler y afinacion", 78500,
+        id_tmec, tmec, [("MANO_OBRA", "Instalacion intercooler y afinacion", 6, 400), ("TRABAJO_EXTERNO", "Intercooler AMS frontal", 1, 6800)], 0, "PRUEBAS_RUTA", comb=35)
 
-    # Evo IX en Pruebas de ruta
-    vid = crear_vehiculo(rec, c_jdm, "JA3AU26U07U400044", "TAB-EVO-D", "Mitsubishi", "Lancer Evo IX MR", 2006, "COMBUSTION", "MANUAL", 78000)
-    ot = crear_ot(rec, vid, "COMBUSTION", "Revision de turbo, cambio de intercooler y afinacion de 400 whp", 78500, 0, comb=35)
-    jefe("PATCH", f"/ordenes-trabajo/{ot}/asignar-tecnico", json={"tecnico_id": id_tmec})
-    tmec("PATCH", f"/ordenes-trabajo/{ot}/estado", json={"estado": "DIAGNOSTICO"})
-    tmec("PATCH", f"/ordenes-trabajo/{ot}/estado", json={"estado": "REPARACION"})
-    tmec("POST", f"/ordenes-trabajo/{ot}/horas", json={"horas": 6, "nota": "Instalacion de intercooler y afinacion en dinamometro"})
-    jefe("POST", f"/ordenes-trabajo/{ot}/partidas", json={"concepto": "MANO_OBRA", "descripcion": "Afinacion completa y cambio de intercooler", "cantidad": 6, "costo": 400})
-    jefe("POST", f"/ordenes-trabajo/{ot}/partidas", json={"concepto": "REFACCION_NUEVA", "descripcion": "Intercooler AMS frontal", "cantidad": 1, "costo": 6800})
-    rec("POST", f"/ordenes-trabajo/{ot}/autorizar-todas", json={"medio": "FIRMA"})
-    tmec("PATCH", f"/ordenes-trabajo/{ot}/estado", json={"estado": "PRUEBAS_RUTA"})
-    print("  Mitsubishi Evo IX MR -> Pruebas de ruta")
+    flujo_completo(c2, "BCNRS15K050005500", "TAB-S15-E", "Nissan", "Silvia S15 Spec-R", 2000, "COMBUSTION", "MANUAL", 110000,
+        "Rebuild de motor SR20DET y cambio de embrague", 110200,
+        id_tmec, tmec, [("MANO_OBRA", "Rebuild SR20DET completo", 16, 300), ("TRABAJO_EXTERNO", "Kit rebuild Tomei + embrague Exedy", 1, 12000)], 0, "ENTREGADO", comb=50)
 
-    # Silvia S15 Entregado
-    vid = crear_vehiculo(rec, c_jdm, "BCNRS15K0500055", "TAB-S15-E", "Nissan", "Silvia S15 Spec-R", 2000, "COMBUSTION", "MANUAL", 110000)
-    ot = crear_ot(rec, vid, "COMBUSTION", "Rebuild de motor SR20DET y cambio de embrague", 110200, -5, comb=50)
-    jefe("PATCH", f"/ordenes-trabajo/{ot}/asignar-tecnico", json={"tecnico_id": id_tmec})
-    tmec("PATCH", f"/ordenes-trabajo/{ot}/estado", json={"estado": "DIAGNOSTICO"})
-    tmec("PATCH", f"/ordenes-trabajo/{ot}/estado", json={"estado": "REPARACION"})
-    tmec("POST", f"/ordenes-trabajo/{ot}/horas", json={"horas": 16, "nota": "Rebuild completo SR20DET: pistones, anillos, metales, embrague"})
-    jefe("POST", f"/ordenes-trabajo/{ot}/partidas", json={"concepto": "MANO_OBRA", "descripcion": "Rebuild SR20DET completo", "cantidad": 16, "costo": 300})
-    jefe("POST", f"/ordenes-trabajo/{ot}/partidas", json={"concepto": "REFACCION_NUEVA", "descripcion": "Kit de rebuild Tomei + embrague Exedy", "cantidad": 1, "costo": 12000})
-    rec("POST", f"/ordenes-trabajo/{ot}/autorizar-todas", json={"medio": "FIRMA"})
-    saldo = float(rec("GET", f"/ordenes-trabajo/{ot}").get("saldo", 0))
-    if saldo > 0:
-        rec("POST", f"/ordenes-trabajo/{ot}/pagos", json={"monto": saldo, "metodo": "TRANSFERENCIA", "tipo": "FINAL"})
-    tmec("PATCH", f"/ordenes-trabajo/{ot}/estado", json={"estado": "PRUEBAS_RUTA"})
-    tmec("PATCH", f"/ordenes-trabajo/{ot}/estado", json={"estado": "TERMINADA"})
-    rec("POST", f"/ordenes-trabajo/{ot}/garantias", json={"tipo": "MANO_OBRA", "dias": 180, "kilometros": 10000})
-    saldo2 = float(rec("GET", f"/ordenes-trabajo/{ot}").get("saldo", 0))
-    if saldo2 <= 0:
-        rec("PATCH", f"/ordenes-trabajo/{ot}/estado", json={"estado": "ENTREGADO"})
-    print("  Nissan Silvia S15 -> Entregado")
+    flujo_completo(c2, "BNR32VSPEC10006600", "TAB-R32-F", "Nissan", "Skyline GT-R R32 V-Spec", 1993, "COMBUSTION", "MANUAL", 142000,
+        "Rebuild de turbos ceramicos a metalicos y cambio de inyectores", 142500,
+        id_tmec, tmec, [("MANO_OBRA", "Desmontaje de turbos", 2, 300)], 0, "ESPERA_REFACCION", comb=30)
 
-    # R32 GT-R en Espera de refaccion
-    vid = crear_vehiculo(rec, c_jdm, "BNR32100066", "TAB-R32-F", "Nissan", "Skyline GT-R R32 V-Spec", 1993, "COMBUSTION", "MANUAL", 142000)
-    ot = crear_ot(rec, vid, "COMBUSTION", "Rebuild de turbos ceramicos a turbos metalicos y cambio de inyectores", 142500, -3, comb=30)
-    jefe("PATCH", f"/ordenes-trabajo/{ot}/asignar-tecnico", json={"tecnico_id": id_tmec})
-    tmec("PATCH", f"/ordenes-trabajo/{ot}/estado", json={"estado": "DIAGNOSTICO"})
-    jefe("POST", f"/ordenes-trabajo/{ot}/pedidos", json={"proveedor": "JDM Parts Direct (Japon)", "numero_guia": "JP-88201", "eta": (hoy + timedelta(days=7)).isoformat()})
-    tmec("PATCH", f"/ordenes-trabajo/{ot}/estado", json={"estado": "ESPERA_REFACCION"})
-    jefe("PATCH", f"/ordenes-trabajo/{ot}/retraso", json={"motivo": "REFACCION"})
-    print("  Nissan Skyline GT-R R32 -> Espera de refaccion (pedido de Japon)")
-
-    print("\n========================================")
-    print("Vehiculos creados: 14")
-    print("  Con checklist HV firmado:  Tesla Model 3, Porsche Taycan 4S")
-    print("  En TERMINADA con saldo:    Mazda 3, Camaro SS, BMW 330i, Honda Accord, Nissan 370Z, Toyota Prius")
-    print("  JDM en Recepcion:          Toyota Supra RZ")
-    print("  JDM en Diagnostico:        Mazda RX-7 FD")
-    print("  JDM en Reparacion:         Honda S2000 AP1")
-    print("  JDM en Pruebas de ruta:    Mitsubishi Evo IX MR")
-    print("  JDM en Espera refaccion:   Nissan Skyline GT-R R32 (pedido de Japon)")
-    print("  JDM Entregado:             Nissan Silvia S15 Spec-R")
-    print("========================================")
+    print("\n=== Listo ===")
+    print("14 vehiculos creados (o saltados si ya existian)")
 
 
 if __name__ == "__main__":
