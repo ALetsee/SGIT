@@ -23,7 +23,7 @@
       {% if e == 'REPARACION' and hv %}
         <div class="gate {{ 'open' if hv_abierto }}" title="{{ 'Checklist HV firmado: puede pasar a Reparación' if hv_abierto else 'Checklist HV pendiente: Reparación bloqueada' }}"><span>{{ 'HV OK' if hv_abierto else 'HV' }}</span></div>
       {% endif %}
-      {% set permitido = (rol in ('JEFE_TALLER','ADMIN')) or (rol == 'TECNICO' and e != 'ENTREGADO') or (rol == 'RECEPCION' and e == 'ENTREGADO') %}
+      {% set permitido = (rol == 'TECNICO' and e != 'ENTREGADO' and e != 'ANULADA') or (rol == 'RECEPCION' and e == 'ENTREGADO' and ot.estado == 'TERMINADA') %}
       <form method="post" action="{{ url_for('orden_accion', ot_id=ot.id, nombre='estado') }}">
         <input type="hidden" name="csrf" value="{{ csrf() }}"><input type="hidden" name="estado" value="{{ e }}">
         <button class="stage {{ 'cur' if loop.index0 == idx else ('past' if loop.index0 < idx) }}" {{ 'disabled' if (not permitido) or loop.index0 == idx }}>{{ LBL[e] }}</button>

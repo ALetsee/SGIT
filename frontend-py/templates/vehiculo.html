@@ -10,7 +10,7 @@
 <section class="panel">
   <h3>Historial de reparaciones</h3>
   {% for o in h.ordenes %}
-  <div class="panel" style="background:#F7F9FA">
+  <div class="panel" style="background:var(--panel-2)">
     <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap">
       <strong><a href="{{ url_for('orden', ot_id=o.id) }}">Orden {{ o.folio }}</a>, {{ o.creado_en|fecha(true) }}</strong>
       <span class="chip {{ 'done' if o.estado in ('TERMINADA','ENTREGADO') }}">{{ LBL[o.estado] }}</span>
