@@ -5,4 +5,4 @@ demo_credenciales.txt
 *.env
 *.enc
 *.tgz
-sgit-instalador.sh
+# sgit-instalador.sh se genera con instalador/construir.sh

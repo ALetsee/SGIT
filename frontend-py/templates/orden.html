@@ -387,6 +387,7 @@
     </form>
 
     <div class="actions" style="margin-top:18px">
+      <a class="btn alt" href="{{ url_for('comprobante_pago', ot_id=ot.id) }}">Comprobante de pago</a>
       <a class="btn {{ '' if ot.estado in ('TERMINADA','ENTREGADO') and ot.saldo|float == 0 else 'alt' }}" href="{{ url_for('orden_salida', ot_id=ot.id) }}">Orden de salida</a>
       {% if ot.estado == 'TERMINADA' %}
       <form class="inline" method="post" action="{{ url_for('orden_accion', ot_id=ot.id, nombre='estado') }}" data-confirm="¿Registrar la entrega del vehículo al cliente?">

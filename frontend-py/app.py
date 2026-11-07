@@ -100,7 +100,7 @@ ROLES = {"RECEPCION": "Recepción", "TECNICO": "Técnico", "JEFE_TALLER": "Jefe 
 ESPEC = {"MECANICO_TRADICIONAL": "Mecánico tradicional", "CERTIFICADO_ALTA_TENSION": "Certificado en alta tensión",
          "DIAGNOSTICO_ELECTRONICO": "Diagnóstico electrónico", "MECANICA_PESADA": "Mecánica pesada"}
 CONCEPTOS = {"MANO_OBRA": "Mano de obra", "REFACCION_NUEVA": "Refacción nueva", "REFACCION_RECONSTRUIDA": "Refacción reconstruida",
-             "TRABAJO_EXTERNO": "Trabajo externo", "SERVICIO_ELECTRICO": "Servicio eléctrico"}
+             "TRABAJO_EXTERNO": "Trabajo externo", "SERVICIO_ELECTRICO": "Servicio eléctrico", "GARANTIA": "Garantía (sin cargo)"}
 MEDIOS = {"FIRMA": "Firma", "WHATSAPP": "WhatsApp", "CORREO": "Correo"}
 TIPOS_MOTOR = {"COMBUSTION": "Combustión", "EV": "Eléctrico (EV)", "PHEV": "Híbrido enchufable (PHEV)", "HEV": "Híbrido (HEV)"}
 RETRASOS = {"REFACCION": "Espera de refacción", "AUTORIZACION_TARDIA": "Autorización tardía",
@@ -586,6 +586,13 @@ def pedido_recibido(pid):
 @requiere("RECEPCION", "JEFE_TALLER", "ADMIN")
 def orden_salida(ot_id):
     return render_template("salida.html", s=api("GET", f"/ordenes-trabajo/{ot_id}/orden-salida"))
+
+
+@app.route("/ordenes/<ot_id>/comprobante")
+@requiere("RECEPCION", "JEFE_TALLER", "ADMIN")
+def comprobante_pago(ot_id):
+    s = api("GET", f"/ordenes-trabajo/{ot_id}/orden-salida")
+    return render_template("comprobante.html", s=s)
 
 
 @app.route("/fotos/<fid>")
