@@ -81,6 +81,7 @@ UNIDAD = {
     "REFACCION_RECONSTRUIDA": ("Piezas", "Costo por pieza (sin margen ni IVA)", "pzas"),
     "TRABAJO_EXTERNO": ("Trabajos", "Costo por trabajo (sin margen ni IVA)", "trab."),
     "SERVICIO_ELECTRICO": ("Servicios", "Costo por servicio (sin margen ni IVA)", "serv."),
+    "GARANTIA": ("Servicios en garantía", "Sin cargo al cliente", "serv."),
 }
 
 
@@ -467,6 +468,7 @@ def orden(ot_id):
         ctx["vehiculos"] = api("GET", "/vehiculos")
     else:
         ctx["vehiculos"] = []
+    ctx["garantias_activas"] = soft("GET", f"/vehiculos/{ot['vehiculo_id']}/garantias-activas") or []
     return render_template("orden.html", **ctx)
 
 
@@ -510,6 +512,9 @@ ACCIONES = {
     "pago": ("POST", "/ordenes-trabajo/{id}/pagos", lambda f: {
         "monto": num(f.get("monto", ""), "monto"), "metodo": f.get("metodo", ""), "tipo": f.get("tipo", "")}, "Pago registrado."),
     "garantia": ("POST", "/ordenes-trabajo/{id}/garantias", _garantia, "Garantía registrada."),
+    "aplicar_garantia": ("POST", "/ordenes-trabajo/{id}/partidas",
+                         lambda f: {"concepto": "GARANTIA", "descripcion": f.get("descripcion", "Trabajo cubierto por garantía"),
+                                    "cantidad": 1, "costo": 0}, "Garantía aplicada: partida sin cargo agregada."),
     "pedido": ("POST", "/ordenes-trabajo/{id}/pedidos", lambda f: opcional(f, "proveedor", "numero_guia", "eta", "refaccion_id"),
                "Pedido registrado; la orden quedó en espera de refacción."),
     "anular": ("POST", "/ordenes-trabajo/{id}/anular", lambda f: {"motivo": f.get("motivo", "")}, "Orden anulada."),

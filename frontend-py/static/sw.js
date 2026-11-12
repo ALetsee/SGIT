@@ -1,6 +1,6 @@
 
 
-const VERSION = 'sgit-1.4.3';
+const VERSION = 'sgit-1.4.4';
 const PRECARGA = ['/offline', '/static/icon-192.png', '/static/icon.svg', '/static/tema.js', '/static/fonts/space-grotesk-latin-wght-normal.woff2', '/static/fonts/manrope-latin-wght-normal.woff2'];
 
 self.addEventListener('install', (e) => {

@@ -41,6 +41,23 @@
 <div class="cols2" style="grid-template-columns:1fr 1.35fr">
 <div>
   <section class="panel">
+    {% if garantias_activas and ot.estado not in ('ENTREGADO','ANULADA') %}
+    <div class="alert ok" style="margin-bottom:16px">
+      <strong>Este vehículo tiene garantía activa.</strong>
+      {% for ga in garantias_activas %}
+      <p style="margin:6px 0 0">{{ 'Mano de obra' if ga.tipo == 'MANO_OBRA' else 'Refacciones' }} — {{ ga.dias }} días / {{ ga.kilometros }} km — vence {{ ga.fecha_vencimiento|fecha(true) }} (orden {{ ga.folio }}: {{ ga.falla_reportada[:60] }}{% if ga.falla_reportada|length > 60 %}…{% endif %})</p>
+      {% endfor %}
+      {% if puede_autorizar %}
+      <form method="post" action="{{ url_for('orden_accion', ot_id=ot.id, nombre='aplicar_garantia') }}" style="margin-top:10px">
+        <input type="hidden" name="csrf" value="{{ csrf() }}">
+        <input type="hidden" name="descripcion" value="Reparación cubierta por garantía vigente (orden {{ garantias_activas[0].folio }})">
+        <button class="btn">Aplicar garantía (sin cargo)</button>
+      </form>
+      {% else %}
+      <p style="margin:6px 0 0;font-style:italic">El jefe de taller puede aplicar la garantía desde la cotización.</p>
+      {% endif %}
+    </div>
+    {% endif %}
     <h3>Datos de la orden</h3>
     <dl>
       <dt>Cliente</dt><dd>{{ ot.cliente_nombre }}{% if ot.cliente_telefono %}, {{ ot.cliente_telefono }}{% endif %}</dd>

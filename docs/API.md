@@ -30,6 +30,7 @@ En la columna *Roles*, «todos» significa cualquier usuario autenticado.
 | POST | `/vehiculos` | Recepción, Jefe de taller, Administrador | Alta de vehículo (RF-01, RF-02) |
 | GET | `/vehiculos` | todos | Buscar por placas, VIN o cliente (?q=) |
 | GET | `/vehiculos/{id}/historial` | todos | Historial del vehículo (RF-28) |
+| GET | `/vehiculos/{vid}/garantias-activas` | todos | Garantías vigentes del vehículo (fecha de vencimiento futura, orden entregada) |
 | POST | `/ordenes-trabajo` | Recepción, Jefe de taller, Administrador | Recibir el vehículo y abrir la orden (RF-07); exige nivel de combustible y/o carga según el tipo de motor (RF-01) |
 | GET | `/ordenes-trabajo` | todos | Listar órdenes (?estado=, ?tecnico_id=, ?q=, ?limite= hasta 500) |
 | GET | `/ordenes-trabajo/{id}` | todos | Detalle de una orden |

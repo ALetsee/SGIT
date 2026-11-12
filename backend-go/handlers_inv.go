@@ -746,3 +746,22 @@ func (a *App) autorizarSinCargo(w http.ResponseWriter, r *http.Request, u *User)
 	}
 	writeJSON(w, 200, out)
 }
+
+func (a *App) garantiasActivasVehiculo(w http.ResponseWriter, r *http.Request, u *User) {
+	vid, err := pathID(r, "vid")
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	rows, err := rowsToMaps(r.Context(), a.db,
+		`SELECT g.id, g.tipo, g.dias, g.kilometros, g.fecha_vencimiento, ot.folio, ot.falla_reportada
+		   FROM garantia g JOIN orden_trabajo ot ON ot.id = g.ot_id
+		  WHERE ot.vehiculo_id = $1 AND ot.estado = 'ENTREGADO'
+		    AND g.fecha_vencimiento > now()
+		  ORDER BY g.fecha_vencimiento DESC`, vid)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, 200, rows)
+}
