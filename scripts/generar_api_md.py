@@ -29,7 +29,9 @@ DESC = {
  'crearHerramienta': 'Alta de herramienta', 'prestarHerramienta': 'Prestar una herramienta', 'devolverHerramienta': 'Devolver una herramienta',
  'alertasHerramientas': 'Herramientas sin devolver (RF-25)', 'crearPedido': 'Pedido a proveedor; deja la orden en espera (RF-26)', 'listarPedidos': 'Pedidos de la orden',
  'pedidoRecibido': 'Marcar un pedido como recibido', 'reporteResumen': 'Reportes (RF-33 a RF-38; ?desde=&hasta=)', 'listarAuditoria': 'Bitácora de auditoría (RF-41)',
- 'verConfiguracion': 'Ver margen e impuesto', 'guardarConfiguracion': 'Cambiar margen e impuesto (RF-19)'}
+ 'verConfiguracion': 'Ver margen e impuesto', 'guardarConfiguracion': 'Cambiar margen e impuesto (RF-19)',
+ 'cambiarVehiculo': 'Corregir el vehículo de la orden (solo en Recepción o Diagnóstico)',
+ 'anularOt': 'Anular la orden con motivo (mínimo 10 caracteres); la orden pasa a ANULADA y no se reabre'}
 f = ["# API del SGIT\n",
  "La API (Go) escucha **solo en `127.0.0.1:8081`**; el frontend en Python es el único que le habla. Todas las respuestas son JSON y los nombres de campo van en `snake_case`.\n",
  "- **Autenticación:** `POST /auth/login` con `{\"email\",\"password\"}` devuelve `access_token` (JWT HS256, 8 horas, con identificador único). Se envía como `Authorization: Bearer <token>`.",
