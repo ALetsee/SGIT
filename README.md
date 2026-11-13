@@ -59,6 +59,15 @@ scripts/             Herramientas de operacion (respaldo, salud, demo)
 
 ## Instalacion
 
+Primero se genera el instalador (un solo archivo .sh que contiene el proyecto empaquetado):
+
+```bash
+cd instalador
+bash construir.sh
+```
+
+Esto crea `sgit-instalador.sh` en la raiz del repositorio. Despues se ejecuta en el servidor:
+
 ```bash
 chmod +x sgit-instalador.sh
 sudo ./sgit-instalador.sh --dominio taller.ejemplo.com
@@ -96,7 +105,7 @@ Opciones del instalador:
 
 ## Version actual
 
-1.3.0
+1.4.4
 
 ## Licencia
 
